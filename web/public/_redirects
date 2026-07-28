@@ -1,0 +1,8 @@
+# Single-page app: every path serves the bundle.
+#
+# Duplicated from netlify.toml on purpose. Netlify resolves netlify.toml
+# relative to the base directory, so setting a base in the UI can leave the
+# root netlify.toml unread — and the failure mode is a site that works on the
+# landing page and 404s on refresh. This file ships inside the publish
+# directory itself, so it applies no matter how the config resolves.
+/*  /index.html  200

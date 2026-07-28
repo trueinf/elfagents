@@ -12,6 +12,8 @@ import {
   type Finding,
   type OrchestrationEvent,
   type Recommendation,
+  type RunState,
+  getRunState,
   streamRun,
 } from "./api";
 
@@ -44,6 +46,10 @@ export interface RunView {
   /** The graph thread this run owns. One per run, not one per launch — two
    *  viewers opening the same launch get independent runs. */
   thread?: string;
+  /** True when this view was rebuilt from a checkpoint rather than streamed. */
+  resumed?: boolean;
+  /** Deep link to this run in LangSmith. */
+  langsmithUrl?: string | null;
 }
 
 const EMPTY: RunView = {
@@ -61,6 +67,43 @@ export function useRun() {
     close.current?.();
     close.current = null;
     setRun(EMPTY);
+  }, []);
+
+  /**
+   * Rebuild the view from a checkpoint.
+   *
+   * This is the kill-and-resume path. The findings and the recommendation are
+   * real — they came off the durable checkpoint written before the process
+   * died. The per-call tool timings are not here, because those were live
+   * events and the process that held them is gone. The UI says so rather than
+   * quietly showing an agent with no tool calls.
+   */
+  const resume = useCallback(async (thread: string) => {
+    close.current?.();
+    close.current = null;
+
+    const state: RunState | null = await getRunState(thread);
+    if (!state) return false;
+
+    const findings: Finding[] = state.values.findings ?? [];
+    setRun({
+      status: state.values.decision ? "decided" : "decided",
+      narration: `Recovered from checkpoint — ${findings.length} findings survived the process that produced them.`,
+      agents: findings.map((finding) => ({
+        name: finding.agent,
+        question: "",
+        state: "done" as AgentState,
+        tools: [],
+        finding,
+      })),
+      recommendation: state.values.recommendation,
+      decision: state.values.decision ?? undefined,
+      events: [],
+      thread,
+      resumed: true,
+      langsmithUrl: state.langsmith_url ?? null,
+    });
+    return true;
   }, []);
 
   const start = useCallback((launchId: string) => {
@@ -190,5 +233,5 @@ export function useRun() {
     );
   }, []);
 
-  return { run, start, reset, setRun };
+  return { run, start, reset, resume, setRun };
 }

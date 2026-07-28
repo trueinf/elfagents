@@ -58,6 +58,17 @@ export function Decision({
     <section>
       {error && <div className="err">{error}</div>}
 
+      {run.resumed && (
+        <div className="resumed-note">
+          <b>Resumed from checkpoint.</b> The process that ran these
+          specialists is gone. Everything below — the findings, the
+          reconciliation, the preserved dissent — was read back from durable
+          state, not re-computed, and the decision below still resumes the same
+          graph. The live-run view is empty for this run because tool timings
+          were events, and events do not survive the process that emitted them.
+        </div>
+      )}
+
       {decided && (
         <div className="decided">
           <h4>Decision recorded</h4>

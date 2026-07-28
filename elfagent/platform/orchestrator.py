@@ -229,14 +229,19 @@ class Orchestrator:
             )
 
         payload = recommendation.model_dump(mode="json")
+        ledger: SpendLedger = config["configurable"]["ledger"]
+        snapshot = ledger.snapshot()
         emit(
             type=EventType.JUDGMENT_RETURNED.value,
             agent="judgment",
             actor_kind="agent",
             recommendation=payload,
+            # What the run actually cost, on the stream rather than only in
+            # state. A caller that watches events and never reads state — the
+            # API's spend accounting, for one — would otherwise see nothing.
+            spend=snapshot,
         )
-        ledger: SpendLedger = config["configurable"]["ledger"]
-        return {"recommendation": payload, "spend": ledger.snapshot()}
+        return {"recommendation": payload, "spend": snapshot}
 
     async def _human_gate_node(self, state: RunState, config: RunnableConfig) -> dict:
         """The gate is first-class state. The graph genuinely stops here.
@@ -300,7 +305,19 @@ class Orchestrator:
         thread_id = thread_id or f"run_{uuid.uuid4().hex[:8]}"
         sink = EventSink(thread_id)
         ledger = SpendLedger(self.limits)
-        config = {"configurable": {"thread_id": thread_id, "ledger": ledger}}
+        config = {
+            "configurable": {"thread_id": thread_id, "ledger": ledger},
+            # Stamped onto the LangSmith trace so the recorded run can be found
+            # again by thread. Without it the console shows a list of runs with
+            # no way to tell which one the app is displaying — and "flip to the
+            # same run in raw tooling" becomes "go and hunt for it".
+            "run_name": f"{self.use_case.key}:{subject_id}",
+            "metadata": {
+                "elfagent_thread": thread_id,
+                "elfagent_subject": subject_id,
+                "elfagent_use_case": self.use_case.key,
+            },
+        }
 
         yield sink.emit(
             EventType.RUN_STARTED,

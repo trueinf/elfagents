@@ -48,7 +48,9 @@ from elfagent.platform.orchestrator import (  # noqa: E402
     Orchestrator,
     sqlite_checkpointer,
 )
-from elfagent.platform.tracing import configure_tracing  # noqa: E402
+from elfagent.platform.tracing import configure_tracing, url_for_thread  # noqa: E402
+
+from .runstore import RunStore  # noqa: E402
 from elfagent.usecases.launch_readiness import signal  # noqa: E402
 from elfagent.usecases.launch_readiness.usecase import build_use_case  # noqa: E402
 
@@ -58,8 +60,12 @@ COOKIE = "elfagent_access"
 # Captured events per run thread. The trace drawer renders these — the same
 # events the live view animated against, so the in-product trace is never
 # reconstructed from a different source than the thing it depicts (§4.1).
+#
+# In memory on purpose: events are a live-view concern. A run that outlives
+# this process is rebuilt from its checkpoint instead, which is the honest
+# thing to show — the findings and the recommendation genuinely survived, the
+# per-call timings did not.
 TRACE: dict[str, list[dict[str, Any]]] = {}
-LAUNCH_OF: dict[str, str] = {}
 
 
 class Decision(BaseModel):
@@ -245,8 +251,10 @@ def _register(api: FastAPI) -> None:
 
         thread = f"run-{launch_id.lower()}-{uuid.uuid4().hex[:8]}"
         TRACE[thread] = []
-        LAUNCH_OF[thread] = launch_id
         orchestrator = request.app.state.orchestrator
+        await request.app.state.runs.record(
+            thread, launch_id, request.app.state.use_case.key
+        )
 
         async def publish():
             spent = 0.0
@@ -269,6 +277,47 @@ def _register(api: FastAPI) -> None:
 
         return EventSourceResponse(publish())
 
+    # ------------------------------------------------------------ resume
+
+    @api.get("/api/launches/{launch_id}/runs")
+    async def runs_for(
+        launch_id: str,
+        request: Request,
+        elfagent_access: str | None = Cookie(default=None),
+    ) -> list[dict[str, Any]]:
+        """Runs on record for a launch, so a killed one can be picked back up.
+
+        This is what makes kill-and-resume a thing you can do in the product
+        rather than only from a script (BUILD_SPEC §10, §14 item 4). The
+        checkpointer already survived the process dying; without this index the
+        surviving runs were simply unreachable, which amounts to the same
+        thing as losing them.
+        """
+        _authorise(elfagent_access)
+        orchestrator = request.app.state.orchestrator
+        found = []
+        for record in await request.app.state.runs.for_subject(launch_id):
+            state = await orchestrator.state(record["thread_id"])
+            if not state["values"]:
+                continue
+            values = state["values"]
+            found.append(
+                {
+                    "thread_id": record["thread_id"],
+                    "created_at": record["created_at"],
+                    "awaiting_human": state["awaiting_human"],
+                    "decided": values.get("decision") is not None,
+                    "findings": len(values.get("findings") or []),
+                    "recommended_action": (values.get("recommendation") or {}).get(
+                        "recommended_action"
+                    ),
+                    # False once this process no longer holds the events — the
+                    # run resumes, the live-view timings do not.
+                    "trace_captured": record["thread_id"] in TRACE,
+                }
+            )
+        return found
+
     # ---------------------------------------------- state / trace / gate
 
     @api.get("/api/runs/thread/{thread_id}")
@@ -281,7 +330,12 @@ def _register(api: FastAPI) -> None:
         state = await request.app.state.orchestrator.state(thread_id)
         if not state["values"]:
             raise HTTPException(404, f"no run on record for {thread_id}")
-        return {**state, "launch_id": LAUNCH_OF.get(thread_id)}
+        return {
+            **state,
+            "launch_id": await request.app.state.runs.subject_of(thread_id),
+            "langsmith_url": url_for_thread(thread_id),
+            "trace_captured": thread_id in TRACE,
+        }
 
     @api.get("/api/runs/thread/{thread_id}/trace")
     async def trace(
@@ -318,7 +372,8 @@ def _register(api: FastAPI) -> None:
             "recommended_action"
         )
         payload = {
-            "subject_id": LAUNCH_OF.get(thread_id, thread_id),
+            "subject_id": await request.app.state.runs.subject_of(thread_id)
+            or thread_id,
             "decided_action": decision.decided_action,
             "decided_by": decision.decided_by,
             "followed_recommendation": decision.decided_action == recommended,
@@ -372,6 +427,10 @@ def create_app(client: Any = None, *, checkpoints: str | None = None) -> FastAPI
         # so the directory may legitimately not exist on first boot.
         Path(checkpoint_path).parent.mkdir(parents=True, exist_ok=True)
         print(f"[boot] checkpoints at {checkpoint_path}", flush=True)
+
+        runs = RunStore(checkpoint_path)
+        await runs.setup()
+        app.state.runs = runs
 
         from elfagent.usecases.launch_readiness.warehouse import DEFAULT_DB
 

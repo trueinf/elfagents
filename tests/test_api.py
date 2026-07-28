@@ -327,6 +327,106 @@ async def test_deciding_twice_is_rejected(api):
     assert again.status_code == 409
 
 
+# -------------------------------------------------------- kill and resume
+
+
+async def test_a_paused_run_survives_the_process_that_produced_it(tmp_path):
+    """BUILD_SPEC §10 and §14 item 4, through the product rather than a script.
+
+    The checkpointer always survived a restart — that is what a file
+    checkpointer is for. What did not survive was knowing which threads
+    existed, so every paused run was intact on disk and unreachable, which
+    amounts to the same thing as losing it.
+    """
+    from api import main as api_module
+
+    checkpoints = str(tmp_path / "durable.sqlite")
+
+    # --- process one: run to the human gate, then die ---
+    first = create_app(_client(), checkpoints=checkpoints)
+    async with first.router.lifespan_context(first):
+        transport = httpx.ASGITransport(app=first)
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://test", timeout=30
+        ) as http:
+            events = await _drain_stream(http)
+            thread = _thread_of(events)
+
+    # Events lived in this process; the checkpoint did not.
+    api_module.TRACE.clear()
+
+    # --- process two: a different app over the same checkpoint file ---
+    second = create_app(_client(), checkpoints=checkpoints)
+    async with second.router.lifespan_context(second):
+        transport = httpx.ASGITransport(app=second)
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://test", timeout=30
+        ) as http:
+            found = (await http.get(f"/api/launches/{LAUNCH}/runs")).json()
+            assert found, "the paused run was unreachable after the restart"
+
+            record = next(r for r in found if r["thread_id"] == thread)
+            assert record["awaiting_human"] is True
+            assert record["findings"] == 4
+            assert record["recommended_action"] == "partial"
+            assert record["trace_captured"] is False, (
+                "live events cannot survive the process that emitted them; "
+                "claiming otherwise would be dishonest"
+            )
+
+            # The findings really are readable, not just counted.
+            state = (await http.get(f"/api/runs/thread/{thread}")).json()
+            assert state["launch_id"] == LAUNCH
+            assert state["values"]["recommendation"]["dissent"]
+
+            # And the gate still works on the resumed run.
+            decided = (
+                await http.post(
+                    f"/api/runs/thread/{thread}/decision",
+                    json={"decided_action": "partial", "note": "Resumed."},
+                )
+            ).json()
+            assert decided["decision"]["decided_action"] == "partial"
+            assert decided["state"]["awaiting_human"] is False
+
+
+async def test_a_decided_run_is_not_offered_for_resume(api):
+    thread = _thread_of(await _drain_stream(api))
+    await api.post(
+        f"/api/runs/thread/{thread}/decision", json={"decided_action": "partial"}
+    )
+    found = (await api.get(f"/api/launches/{LAUNCH}/runs")).json()
+
+    record = next(r for r in found if r["thread_id"] == thread)
+    assert record["awaiting_human"] is False
+    assert record["decided"] is True
+
+
+# --------------------------------------------------------------- spend
+
+
+async def test_the_run_cost_reaches_the_event_stream(api):
+    """The deployment ceiling counts what it sees on the stream.
+
+    It previously saw nothing: the ledger snapshot went into graph state and
+    never into an event, so the ceiling never moved and the guard protecting a
+    public URL did not.
+    """
+    events = await _drain_stream(api)
+    judged = next(e for e in events if e["type"] == "judgment_returned")
+
+    spend = judged["payload"].get("spend")
+    assert spend is not None, "no spend snapshot on the stream"
+    assert spend["total_tokens"] > 0
+    assert set(spend["by_agent"]) == {
+        "regulatory",
+        "supply",
+        "retailer",
+        "packaging",
+        "judgment",
+    }
+
+
 # ------------------------------------------------------------------- access
 
 

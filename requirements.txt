@@ -5,6 +5,7 @@ duckdb>=1.0
 # Platform shell (BUILD_SPEC step 2)
 langgraph>=1.0
 langgraph-checkpoint-sqlite>=3.0   # durable checkpointing — a file, not memory
+aiosqlite>=0.20                    # the run index, alongside those checkpoints
 langsmith>=0.1
 pydantic>=2.7
 

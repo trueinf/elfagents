@@ -98,6 +98,14 @@ export function TraceDrawer({
                 </div>
               </div>
 
+              {run.resumed && (
+                <div className="resumed-note">
+                  <b>Rebuilt from checkpoint.</b> Tool calls and timings are
+                  absent because they were live events. What is shown came from
+                  durable state.
+                </div>
+              )}
+
               <div className="tree">
                 <div className="tn">
                   <span className="nm">e.l.f.orchestra.run</span>
@@ -161,18 +169,25 @@ export function TraceDrawer({
               </div>
 
               <div className="lslink">
-                🔎 <span>
-                  The same run in raw tooling —{" "}
-                  <a
-                    href="https://smith.langchain.com"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    open it in LangSmith
-                  </a>
-                  . This panel is our rendered view of the LangGraph event
-                  stream; LangSmith is the independent recording, kept in its
-                  native form so it can be checked rather than trusted.
+                🔎{" "}
+                <span>
+                  {run.langsmithUrl ? (
+                    <>
+                      <a href={run.langsmithUrl} target="_blank" rel="noreferrer">
+                        Open this exact run in LangSmith →
+                      </a>{" "}
+                      This panel is our rendered view of the LangGraph event
+                      stream; LangSmith is the independent recording, kept in
+                      its native form so it can be checked rather than trusted.
+                    </>
+                  ) : (
+                    <>
+                      No LangSmith run linked yet. The deep link appears once
+                      the trace has flushed — or tracing is off, in which case
+                      this run was not recorded and saying so is better than a
+                      link that goes nowhere.
+                    </>
+                  )}
                 </span>
               </div>
             </>

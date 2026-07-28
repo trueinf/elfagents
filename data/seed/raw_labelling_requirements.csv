@@ -5,7 +5,7 @@ SKU-VITC,DE,EU Responsible Person address on pack,pending,Awaiting RP appointmen
 SKU-VITC,UK,GB INCI panel,met,Compliant at GB limits
 SKU-VITC,UK,UK Responsible Person address on pack,met,GB RP named on current artwork
 SKU-HYDR,US,MoCRA ingredient declaration,met,Compliant
-SKU-GLOW,US,MoCRA ingredient declaration,met,Compliant
+SKU-GLOW,US,MoCRA ingredient declaration,pending,Awaiting the revised shade-name panel
 SKU-GLOW,DE,EU INCI panel,blocked,Cannot be met while a prohibited substance is present
 SKU-GLOW,UK,GB INCI panel,blocked,Cannot be met while a prohibited substance is present
 SKU-LUMI,US,MoCRA ingredient declaration,pending,Panel not yet drafted

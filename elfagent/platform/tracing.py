@@ -54,21 +54,53 @@ def configure_tracing(env: dict[str, str] | None = None) -> TracingConfig:
     return TracingConfig(True, project)
 
 
+def _enabled() -> bool:
+    return os.environ.get("LANGSMITH_TRACING", "").lower() in {"1", "true", "yes"}
+
+
 def run_url(run_id: str) -> str | None:
     """Deep link to a run in the LangSmith console — the proof surface.
 
     Returns None when tracing is off, so callers surface "not recorded" instead
     of a link that goes nowhere.
     """
+    if not _enabled():
+        return None
     try:
         from langsmith import Client
-    except ImportError:
-        return None
 
-    if os.environ.get("LANGSMITH_TRACING", "").lower() not in {"1", "true", "yes"}:
-        return None
-
-    try:
         return Client().get_run_url(run_id=run_id)
+    except Exception:
+        return None
+
+
+def url_for_thread(thread_id: str) -> str | None:
+    """Find the recorded run for one graph thread.
+
+    This is what makes surface 3 an actual proof rather than a gesture. A
+    technical viewer asking "is this real?" should land on the exact run the
+    app is showing, not on a project listing they have to search.
+
+    Returns None rather than raising: tracing being off, or the trace not
+    having flushed yet, is a normal state the UI should report plainly.
+    """
+    if not _enabled():
+        return None
+    try:
+        from langsmith import Client
+
+        client = Client()
+        project = os.environ.get("LANGSMITH_PROJECT", "elfagent-launch-readiness")
+        runs = list(
+            client.list_runs(
+                project_name=project,
+                filter=(
+                    "and(eq(is_root, true), "
+                    f'has(metadata, \'{{"elfagent_thread": "{thread_id}"}}\'))'
+                ),
+                limit=1,
+            )
+        )
+        return client.get_run_url(run=runs[0]) if runs else None
     except Exception:
         return None

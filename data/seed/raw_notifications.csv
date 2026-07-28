@@ -3,7 +3,7 @@ SKU-VITC,US,none,not_required,MoCRA product listing only; no pre-market notifica
 SKU-VITC,DE,CPNP,in_progress,CPSR complete; portal submission pending
 SKU-VITC,UK,SCPN,complete,GB filing complete on the separate SCPN portal
 SKU-HYDR,US,none,not_required,US-only launch
-SKU-GLOW,US,none,not_required,MoCRA product listing only (demo)
+SKU-GLOW,US,MoCRA,in_progress,Product listing submitted; facility registration still pending
 SKU-GLOW,DE,CPNP,not_started,Blocked upstream by a prohibited substance
 SKU-GLOW,UK,SCPN,not_started,Blocked upstream by a prohibited substance
 SKU-LUMI,US,none,not_required,US-only launch

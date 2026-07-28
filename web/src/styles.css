@@ -464,5 +464,26 @@ button { font-family: inherit; cursor: pointer; }
 .kindtag.agent { background: var(--pink); color: #fff; }
 .kindtag.tool { background: #eee9e4; color: var(--muted); }
 
+.resumable {
+  background: linear-gradient(0deg, #eef2fd, #fafbff);
+  border: 1.5px solid var(--partial-line); border-radius: var(--radius);
+  padding: 18px 22px; margin-bottom: 18px;
+  display: flex; gap: 15px; align-items: flex-start;
+}
+.resumable .ic {
+  flex-shrink: 0; width: 34px; height: 34px; border-radius: 10px;
+  background: var(--partial-bg); color: var(--partial);
+  display: grid; place-items: center; font-size: 16px;
+}
+.resumable h4 { font-size: 14px; font-weight: 750; margin-bottom: 5px; }
+.resumable p { font-size: 12.5px; color: var(--ink2); line-height: 1.6; max-width: 620px; }
+
+.resumed-note {
+  background: var(--partial-bg); border: 1px solid var(--partial-line);
+  border-radius: 12px; padding: 13px 16px; margin-bottom: 16px;
+  font-size: 12.5px; color: var(--ink2); line-height: 1.6;
+}
+.resumed-note b { color: var(--partial); }
+
 .empty { padding: 60px 20px; text-align: center; color: var(--faint); font-size: 13.5px; }
 .err { background: var(--hold-bg); border: 1px solid var(--hold); color: var(--hold); border-radius: 12px; padding: 14px 18px; font-size: 13px; margin-bottom: 16px; }

@@ -4,10 +4,12 @@ import {
   type Launch,
   type Lean,
   ApiUnreachable,
+  type RunRecord,
   Unauthorised,
   authenticate,
   getAnatomy,
   getLaunches,
+  getRunsFor,
   submitDecision,
 } from "./api";
 import type { GridMode } from "./components/MarketGrid";
@@ -119,7 +121,8 @@ export default function App() {
   const [deciding, setDeciding] = useState(false);
   const [error, setError] = useState<string | undefined>();
 
-  const { run, start, reset, setRun } = useRun();
+  const [resumable, setResumable] = useState<RunRecord[]>([]);
+  const { run, start, reset, resume, setRun } = useRun();
 
   const load = useCallback(() => {
     getLaunches()
@@ -148,9 +151,22 @@ export default function App() {
       setView("live");
       setError(undefined);
       reset();
+      // A run left paused by an earlier process is still on the checkpoint.
+      // Offer it rather than silently starting a second one.
+      getRunsFor(id)
+        .then((records) => setResumable(records.filter((r) => r.awaiting_human)))
+        .catch(() => setResumable([]));
     },
     [reset],
   );
+
+  useEffect(() => {
+    if (selected) {
+      getRunsFor(selected)
+        .then((records) => setResumable(records.filter((r) => r.awaiting_human)))
+        .catch(() => setResumable([]));
+    }
+  }, [selected]);
 
   const decide = useCallback(
     async (action: Lean, note: string) => {
@@ -246,6 +262,43 @@ export default function App() {
         )}
 
         {error && view === "live" && <div className="err">{error}</div>}
+
+        {view !== "anatomy" && resumable.length > 0 && !run.thread && (
+          <div className="resumable">
+            <div className="ic">⏻</div>
+            <div style={{ flex: 1 }}>
+              <h4>
+                {resumable.length === 1 ? "A run is" : `${resumable.length} runs are`}{" "}
+                paused at the human gate
+              </h4>
+              <p>
+                Written to the checkpoint before the process that produced them
+                ended. The findings and the reconciliation survived; the
+                per-call timings did not, because those were live events. Pick
+                it up where it stopped rather than paying for a second run.
+              </p>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {resumable.slice(0, 2).map((record) => (
+                <button
+                  key={record.thread_id}
+                  className="btn primary"
+                  onClick={async () => {
+                    if (await resume(record.thread_id)) {
+                      setResumable([]);
+                      setView("decision");
+                    }
+                  }}
+                >
+                  Resume{" "}
+                  {record.recommended_action
+                    ? `(${record.recommended_action})`
+                    : `(${record.findings} findings)`}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {view === "anatomy" ? (
           <Anatomy anatomy={anatomy} />

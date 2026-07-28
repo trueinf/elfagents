@@ -201,7 +201,26 @@ export interface RunState {
   values: Record<string, any>;
   next: string[];
   awaiting_human: boolean;
+  launch_id?: string | null;
+  /** Deep link to this exact run in LangSmith — §4.1 surface 3. */
+  langsmith_url?: string | null;
+  /** False once the process that streamed this run is gone. */
+  trace_captured?: boolean;
 }
+
+/** A run on record for a launch, resumable or already decided. */
+export interface RunRecord {
+  thread_id: string;
+  created_at: string;
+  awaiting_human: boolean;
+  decided: boolean;
+  findings: number;
+  recommended_action: Lean | null;
+  trace_captured: boolean;
+}
+
+export const getRunsFor = (launchId: string) =>
+  get<RunRecord[]>(`/api/launches/${launchId}/runs`);
 
 export async function getRunState(thread: string): Promise<RunState | null> {
   const response = await fetch(url(`/api/runs/thread/${thread}`), {

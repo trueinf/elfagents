@@ -26,9 +26,15 @@ COPY data/seed/ data/seed/
 # a build failure rather than a runtime surprise.
 RUN cd dbt && dbt build --profiles-dir . --target dev
 
-# Checkpoints are written at runtime. On a host with an ephemeral filesystem
-# this directory does not survive a redeploy, and paused runs go with it —
-# mount a disk here if that guarantee has to hold.
+# Move the warehouse OUT of /app/data. That path is where a persistence volume
+# gets mounted, and a mount replaces the directory wholesale — taking the
+# baked-in warehouse with it. Build artefact and runtime state get their own
+# directories so mounting one cannot destroy the other.
+RUN mkdir -p /app/warehouse && mv /app/data/elfagent.duckdb /app/warehouse/
+ENV ELFAGENT_WAREHOUSE=/app/warehouse/elfagent.duckdb
+
+# Checkpoints are runtime state. Mount a volume here to keep paused runs
+# across redeploys; without one the filesystem is ephemeral and they are lost.
 ENV ELFAGENT_CHECKPOINTS=/app/data/checkpoints.sqlite
 
 EXPOSE 8000

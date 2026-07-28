@@ -166,8 +166,9 @@ def _register(api: FastAPI) -> None:
             problems.append(f"model client: {state.model_error}")
         if not getattr(state, "warehouse_ok", True):
             problems.append(
-                "warehouse missing — data/elfagent.duckdb is not present. "
-                "A volume mounted at /app/data shadows the image's copy."
+                "warehouse missing. Set ELFAGENT_WAREHOUSE, or check that a "
+                "mounted volume has not replaced the directory the image "
+                "built it into."
             )
 
         return {
@@ -372,10 +373,11 @@ def create_app(client: Any = None, *, checkpoints: str | None = None) -> FastAPI
         Path(checkpoint_path).parent.mkdir(parents=True, exist_ok=True)
         print(f"[boot] checkpoints at {checkpoint_path}", flush=True)
 
-        warehouse = Path("data/elfagent.duckdb")
+        from elfagent.usecases.launch_readiness.warehouse import DEFAULT_DB
+
         print(
-            f"[boot] warehouse {'found' if warehouse.exists() else 'MISSING'} "
-            f"at {warehouse.resolve()}",
+            f"[boot] warehouse {'found' if DEFAULT_DB.exists() else 'MISSING'} "
+            f"at {DEFAULT_DB}",
             flush=True,
         )
 
@@ -399,7 +401,7 @@ def create_app(client: Any = None, *, checkpoints: str | None = None) -> FastAPI
             app.state.use_case = use_case
             app.state.budget = Budget()
             app.state.model_error = model_error
-            app.state.warehouse_ok = warehouse.exists()
+            app.state.warehouse_ok = DEFAULT_DB.exists()
             app.state.orchestrator = Orchestrator(
                 use_case,
                 checkpointer=checkpointer,

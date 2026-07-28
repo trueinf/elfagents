@@ -12,14 +12,17 @@ pydantic>=2.7
 # must stay hermetic and must not pick up whatever is in a local .env.
 python-dotenv>=1.0
 
-# Tests
-pytest>=8
-pytest-asyncio>=1.0
-
 # Agents (BUILD_SPEC step 3+)
 anthropic>=0.116
 
-# API layer (step 6)
-# fastapi>=0.115
-# uvicorn[standard]>=0.30
-# sse-starlette>=2.1
+# API layer (BUILD_SPEC step 6). These are runtime dependencies, not optional
+# extras — the container's entrypoint is uvicorn, so a commented-out line here
+# is a container that builds cleanly and then cannot start.
+fastapi>=0.115
+uvicorn[standard]>=0.30
+sse-starlette>=2.1
+
+# Tests
+pytest>=8
+pytest-asyncio>=1.0
+httpx>=0.27

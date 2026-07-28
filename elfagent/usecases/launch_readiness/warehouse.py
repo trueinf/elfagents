@@ -12,13 +12,22 @@ Snowflake.
 
 from __future__ import annotations
 
+import os
 from contextlib import contextmanager
 from pathlib import Path
 
 import duckdb
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_DB = REPO_ROOT / "data" / "elfagent.duckdb"
+
+# The warehouse is a BUILD artefact and the checkpoints are RUNTIME state, so
+# they must not share a directory. A volume mounted to persist checkpoints
+# replaces the directory wholesale, and anything the image baked there — the
+# warehouse included — disappears. Overridable so the container can keep them
+# apart; the local default is unchanged.
+DEFAULT_DB = Path(
+    os.environ.get("ELFAGENT_WAREHOUSE", str(REPO_ROOT / "data" / "elfagent.duckdb"))
+)
 
 
 class WarehouseMissing(RuntimeError):

@@ -31,6 +31,7 @@ import os
 import secrets
 import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
@@ -152,12 +153,28 @@ def _register(api: FastAPI) -> None:
 
     @api.get("/api/health")
     async def health(request: Request) -> dict[str, Any]:
-        """Unauthenticated on purpose — hosting platforms probe it."""
-        budget: Budget = request.app.state.budget
+        """Unauthenticated on purpose — hosting platforms probe it.
+
+        Reports degraded rather than failing. A health check that dies on a
+        missing key gets the container killed and replaced, over and over,
+        with the reason never surfacing.
+        """
+        state = request.app.state
+        budget: Budget = state.budget
+        problems = []
+        if getattr(state, "model_error", None):
+            problems.append(f"model client: {state.model_error}")
+        if not getattr(state, "warehouse_ok", True):
+            problems.append(
+                "warehouse missing — data/elfagent.duckdb is not present. "
+                "A volume mounted at /app/data shadows the image's copy."
+            )
+
         return {
-            "ok": True,
-            "use_case": request.app.state.use_case.key,
-            "agents": [s.name for s in request.app.state.use_case.specialists],
+            "ok": not problems,
+            "problems": problems,
+            "use_case": state.use_case.key,
+            "agents": [s.name for s in state.use_case.specialists],
             "auth_required": bool(os.environ.get("ELFAGENT_ACCESS_KEY", "")),
             "budget": {
                 "spent_usd": round(budget.spent, 4),
@@ -210,6 +227,12 @@ def _register(api: FastAPI) -> None:
         two independent runs.
         """
         _authorise(elfagent_access)
+        if getattr(request.app.state, "model_error", None):
+            raise HTTPException(
+                503,
+                f"no model client: {request.app.state.model_error}. "
+                "Check ANTHROPIC_API_KEY on the API service.",
+            )
         subject = next(
             (q for q in signal.queue() if q["launch_id"] == launch_id), None
         )
@@ -331,26 +354,58 @@ def create_app(client: Any = None, *, checkpoints: str | None = None) -> FastAPI
         run this process never started. On a host with an ephemeral filesystem
         that guarantee ends at redeploy; mount a disk if it has to hold.
         """
-        print(f"  {configure_tracing().describe()}")
+        # Logged step by step because a container that fails to start says
+        # nothing useful: the platform reports a health-check timeout, and the
+        # actual cause is whichever line below did not print.
+        print("[boot] starting elfagent api", flush=True)
+        print(f"[boot] {configure_tracing().describe()}", flush=True)
+
         if not os.environ.get("ELFAGENT_ACCESS_KEY"):
             print(
-                "  WARNING: ELFAGENT_ACCESS_KEY is unset — every endpoint is "
-                "open, and each run spends real model credit."
+                "[boot] WARNING: ELFAGENT_ACCESS_KEY unset — every endpoint is "
+                "open, and each run spends real model credit.",
+                flush=True,
             )
+
+        # A mounted volume replaces whatever the image baked into this path,
+        # so the directory may legitimately not exist on first boot.
+        Path(checkpoint_path).parent.mkdir(parents=True, exist_ok=True)
+        print(f"[boot] checkpoints at {checkpoint_path}", flush=True)
+
+        warehouse = Path("data/elfagent.duckdb")
+        print(
+            f"[boot] warehouse {'found' if warehouse.exists() else 'MISSING'} "
+            f"at {warehouse.resolve()}",
+            flush=True,
+        )
+
         async with sqlite_checkpointer(checkpoint_path) as checkpointer:
-            model = client or AnthropicClient(
-                model=os.environ.get("ELFAGENT_MODEL", "claude-opus-5")
-            )
+            # Constructing the model client can fail on a bad or absent key.
+            # That must not stop the process from serving /api/health, or the
+            # platform kills the container and the reason is never visible.
+            model, model_error = client, None
+            if model is None:
+                try:
+                    model = AnthropicClient(
+                        model=os.environ.get("ELFAGENT_MODEL", "claude-opus-5")
+                    )
+                except Exception as failure:
+                    model_error = f"{type(failure).__name__}: {failure}"
+                    print(f"[boot] MODEL CLIENT FAILED — {model_error}", flush=True)
+
             use_case = build_use_case(
                 model, effort=os.environ.get("ELFAGENT_EFFORT", "high")
             )
             app.state.use_case = use_case
             app.state.budget = Budget()
+            app.state.model_error = model_error
+            app.state.warehouse_ok = warehouse.exists()
             app.state.orchestrator = Orchestrator(
                 use_case,
                 checkpointer=checkpointer,
                 limits=RunLimits.from_env(dict(os.environ)),
             )
+            print("[boot] ready", flush=True)
             yield
 
     # Dev origins plus whatever the deployed front end is served from.

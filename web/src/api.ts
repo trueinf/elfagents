@@ -137,6 +137,30 @@ export const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "")
 
 const url = (path: string) => `${API_BASE}${path}`;
 
+/**
+ * Session token.
+ *
+ * A cookie would be simpler, and it is what this used to do. It does not work
+ * deployed: the front end and the API sit on different registrable domains, so
+ * the cookie is third-party and browsers block it — the login succeeds and
+ * every request after it still comes back 401. The token goes in an
+ * Authorization header instead, and in a query parameter for the one endpoint
+ * that cannot carry headers.
+ */
+const TOKEN_KEY = "elfagent_token";
+let token: string | null =
+  typeof localStorage !== "undefined" ? localStorage.getItem(TOKEN_KEY) : null;
+
+function setToken(value: string | null) {
+  token = value;
+  if (typeof localStorage === "undefined") return;
+  if (value) localStorage.setItem(TOKEN_KEY, value);
+  else localStorage.removeItem(TOKEN_KEY);
+}
+
+const authHeaders = (): Record<string, string> =>
+  token ? { Authorization: `Bearer ${token}` } : {};
+
 /** Raised when the API wants the shared access key. */
 export class Unauthorised extends Error {}
 
@@ -168,7 +192,10 @@ async function parse<T>(response: Response, path: string): Promise<T> {
 async function get<T>(path: string): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(url(path), { credentials: "include" });
+    response = await fetch(url(path), {
+      credentials: "include",
+      headers: authHeaders(),
+    });
   } catch (cause) {
     throw new ApiUnreachable(
       API_BASE
@@ -176,7 +203,10 @@ async function get<T>(path: string): Promise<T> {
         : NO_API,
     );
   }
-  if (response.status === 401) throw new Unauthorised();
+  if (response.status === 401) {
+    setToken(null);
+    throw new Unauthorised();
+  }
   if (!response.ok) throw new Error(`${path} -> ${response.status}`);
   return parse<T>(response, path);
 }
@@ -190,6 +220,8 @@ export async function authenticate(key: string): Promise<void> {
   });
   if (response.status === 401) throw new Unauthorised();
   if (!response.ok) throw new Error(await response.text());
+  const body = await response.json();
+  setToken(body.token ?? null);
 }
 
 export const getLaunches = () => get<Launch[]>("/api/launches");
@@ -225,6 +257,7 @@ export const getRunsFor = (launchId: string) =>
 export async function getRunState(thread: string): Promise<RunState | null> {
   const response = await fetch(url(`/api/runs/thread/${thread}`), {
     credentials: "include",
+    headers: authHeaders(),
   });
   if (response.status === 404) return null;
   if (response.status === 401) throw new Unauthorised();
@@ -238,7 +271,7 @@ export async function submitDecision(
 ) {
   const response = await fetch(url(`/api/runs/thread/${thread}/decision`), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     credentials: "include",
     body: JSON.stringify(body),
   });
@@ -257,10 +290,11 @@ export function streamRun(
   onEvent: (event: OrchestrationEvent) => void,
   onError?: (error: Event) => void,
 ): () => void {
-  // withCredentials so the access cookie rides along — EventSource cannot set
-  // headers, which is why the key is exchanged for a cookie rather than sent
-  // on each request.
-  const source = new EventSource(url(`/api/runs/${launchId}/stream`), {
+  // EventSource cannot set headers, so the token rides in the query string for
+  // this one endpoint. It is a short-lived opaque session token, never the
+  // shared key — what lands in a server log is useless once it expires.
+  const query = token ? `?token=${encodeURIComponent(token)}` : "";
+  const source = new EventSource(url(`/api/runs/${launchId}/stream${query}`), {
     withCredentials: true,
   });
 

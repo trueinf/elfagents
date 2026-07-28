@@ -29,13 +29,14 @@ import asyncio
 import json
 import os
 import secrets
+import time
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-from fastapi import Cookie, FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
@@ -108,18 +109,61 @@ class Budget:
         self.spent += usd
 
 
-def _authorise(supplied: str | None) -> None:
-    """Check the shared access key.
+# Issued session tokens -> expiry. In memory: a restart forces everyone to
+# re-enter the key, which for a shared demo gate is a fair trade against
+# persisting anything sensitive.
+TOKENS: dict[str, float] = {}
+TOKEN_TTL = 8 * 60 * 60
 
-    An unset key means the deployment is open — correct for local development,
-    wrong for anything with a public URL, so it is logged loudly at startup
-    rather than passing silently.
+
+def _issue_token() -> str:
+    now = time.time()
+    for token, expiry in list(TOKENS.items()):
+        if expiry < now:
+            del TOKENS[token]
+    token = secrets.token_urlsafe(24)
+    TOKENS[token] = now + TOKEN_TTL
+    return token
+
+
+def _authorise(request: Request) -> None:
+    """Check the shared access key, however it arrived.
+
+    Three carriers, because no single one covers every call:
+
+    * `Authorization: Bearer` for ordinary fetches — the right answer.
+    * `?token=` for the SSE endpoint, because EventSource cannot set headers.
+      A short-lived opaque token rather than the key itself, so what lands in
+      a server log is useless once it expires.
+    * A cookie, which works same-origin in development. It does NOT work in
+      the deployed setup: the front end and API are different registrable
+      domains, making it a third-party cookie that browsers now block.
+
+    An unset key means the deployment is open — correct locally, wrong for
+    anything public, so startup logs it loudly rather than passing silently.
     """
     expected = os.environ.get("ELFAGENT_ACCESS_KEY", "")
     if not expected:
         return
-    if not supplied or not secrets.compare_digest(supplied, expected):
-        raise HTTPException(401, "not authorised")
+
+    header = request.headers.get("authorization", "")
+    bearer = header[7:] if header.lower().startswith("bearer ") else ""
+    candidates = [
+        bearer,
+        request.query_params.get("token", ""),
+        request.cookies.get(COOKIE, ""),
+    ]
+
+    for candidate in candidates:
+        if not candidate:
+            continue
+        now = time.time()
+        if TOKENS.get(candidate, 0) > now:
+            return
+        if secrets.compare_digest(candidate, expected):
+            return
+
+    raise HTTPException(401, "not authorised")
 
 
 def _register(api: FastAPI) -> None:
@@ -128,7 +172,7 @@ def _register(api: FastAPI) -> None:
     @api.post("/api/auth")
     async def authenticate(
         body: dict, request: Request, response: Response
-    ) -> dict[str, bool]:
+    ) -> dict[str, Any]:
         """Exchange the shared key for a cookie.
 
         A cookie rather than a header because EventSource cannot set headers,
@@ -153,9 +197,11 @@ def _register(api: FastAPI) -> None:
             httponly=True,
             samesite="none" if cross_site else "lax",
             secure=cross_site,
-            max_age=60 * 60 * 8,
+            max_age=TOKEN_TTL,
         )
-        return {"ok": True}
+        # The token is what actually works cross-site. The cookie above is kept
+        # for same-origin development only.
+        return {"ok": True, "token": _issue_token(), "expires_in": TOKEN_TTL}
 
     @api.get("/api/health")
     async def health(request: Request) -> dict[str, Any]:
@@ -193,27 +239,23 @@ def _register(api: FastAPI) -> None:
     # ------------------------------------------------------------- queue
 
     @api.get("/api/launches")
-    async def launches(
-        elfagent_access: str | None = Cookie(default=None),
-    ) -> list[dict[str, Any]]:
+    async def launches(request: Request) -> list[dict[str, Any]]:
         """The launch queue — output of the deterministic countdown detector.
 
         No model is involved in producing this list. A scheduled check compares
         each launch's countdown against a threshold; that is the whole of it.
         """
-        _authorise(elfagent_access)
+        _authorise(request)
         return signal.queue()
 
     @api.get("/api/usecase")
-    async def usecase(
-        request: Request, elfagent_access: str | None = Cookie(default=None)
-    ) -> dict[str, Any]:
+    async def usecase(request: Request) -> dict[str, Any]:
         """Which components are agents and which are tools, with the reason.
 
         The UI renders the tool-vs-agent distinction from this rather than from
         a hardcoded list, so the demo's thesis reads data the codebase holds.
         """
-        _authorise(elfagent_access)
+        _authorise(request)
         return request.app.state.use_case.anatomy()
 
     # ------------------------------------------------------------ stream
@@ -222,7 +264,6 @@ def _register(api: FastAPI) -> None:
     async def stream(
         launch_id: str,
         request: Request,
-        elfagent_access: str | None = Cookie(default=None),
     ):
         """Run the flow, streaming events as they happen.
 
@@ -233,7 +274,7 @@ def _register(api: FastAPI) -> None:
         Each call gets its own thread. Two people opening the same launch get
         two independent runs.
         """
-        _authorise(elfagent_access)
+        _authorise(request)
         if getattr(request.app.state, "model_error", None):
             raise HTTPException(
                 503,
@@ -283,7 +324,6 @@ def _register(api: FastAPI) -> None:
     async def runs_for(
         launch_id: str,
         request: Request,
-        elfagent_access: str | None = Cookie(default=None),
     ) -> list[dict[str, Any]]:
         """Runs on record for a launch, so a killed one can be picked back up.
 
@@ -293,7 +333,7 @@ def _register(api: FastAPI) -> None:
         surviving runs were simply unreachable, which amounts to the same
         thing as losing them.
         """
-        _authorise(elfagent_access)
+        _authorise(request)
         orchestrator = request.app.state.orchestrator
         found = []
         for record in await request.app.state.runs.for_subject(launch_id):
@@ -324,9 +364,8 @@ def _register(api: FastAPI) -> None:
     async def run_state(
         thread_id: str,
         request: Request,
-        elfagent_access: str | None = Cookie(default=None),
     ) -> dict[str, Any]:
-        _authorise(elfagent_access)
+        _authorise(request)
         state = await request.app.state.orchestrator.state(thread_id)
         if not state["values"]:
             raise HTTPException(404, f"no run on record for {thread_id}")
@@ -338,11 +377,9 @@ def _register(api: FastAPI) -> None:
         }
 
     @api.get("/api/runs/thread/{thread_id}/trace")
-    async def trace(
-        thread_id: str, elfagent_access: str | None = Cookie(default=None)
-    ) -> list[dict[str, Any]]:
+    async def trace(thread_id: str, request: Request) -> list[dict[str, Any]]:
         """The captured event stream, for the trace drawer."""
-        _authorise(elfagent_access)
+        _authorise(request)
         if thread_id not in TRACE:
             raise HTTPException(404, f"no captured trace for {thread_id}")
         return TRACE[thread_id]
@@ -352,7 +389,6 @@ def _register(api: FastAPI) -> None:
         thread_id: str,
         decision: Decision,
         request: Request,
-        elfagent_access: str | None = Cookie(default=None),
     ) -> dict[str, Any]:
         """Record the human's decision and resume the graph.
 
@@ -360,7 +396,7 @@ def _register(api: FastAPI) -> None:
         anywhere writes one and nothing upstream of the gate can supply it —
         which is what "the system recommends, it cannot act" means in practice.
         """
-        _authorise(elfagent_access)
+        _authorise(request)
         orchestrator = request.app.state.orchestrator
         state = await orchestrator.state(thread_id)
         if not state["values"]:

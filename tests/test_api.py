@@ -440,8 +440,42 @@ async def test_endpoints_are_closed_when_an_access_key_is_set(api, monkeypatch):
     assert (await api.get("/api/health")).status_code == 200
 
     assert (await api.post("/api/auth", json={"key": "wrong"})).status_code == 401
-    assert (await api.post("/api/auth", json={"key": "shared-secret"})).status_code == 200
-    assert (await api.get("/api/launches")).status_code == 200
+
+
+async def test_a_bearer_token_authorises_without_a_cookie(api, monkeypatch):
+    """The deployed setup is cross-site, where the cookie never comes back.
+
+    Netlify and Railway are different registrable domains, so the access cookie
+    is third-party and browsers block it: login succeeds and every request
+    after it still 401s. The token has to travel on the request itself.
+    """
+    monkeypatch.setenv("ELFAGENT_ACCESS_KEY", "shared-secret")
+
+    issued = await api.post("/api/auth", json={"key": "shared-secret"})
+    assert issued.status_code == 200
+    token = issued.json()["token"]
+    assert token and token != "shared-secret", "never hand back the shared key"
+
+    # Drop every cookie, exactly as a third-party-blocking browser would.
+    api.cookies.clear()
+    assert (await api.get("/api/launches")).status_code == 401
+
+    headers = {"Authorization": f"Bearer {token}"}
+    assert (await api.get("/api/launches", headers=headers)).status_code == 200
+    assert (await api.get("/api/usecase", headers=headers)).status_code == 200
+
+
+async def test_the_stream_accepts_a_token_in_the_query_string(api, monkeypatch):
+    """EventSource cannot set headers, so this one endpoint takes a parameter."""
+    monkeypatch.setenv("ELFAGENT_ACCESS_KEY", "shared-secret")
+    token = (await api.post("/api/auth", json={"key": "shared-secret"})).json()["token"]
+    api.cookies.clear()
+
+    assert (await api.get(f"/api/runs/{LAUNCH}/stream")).status_code == 401
+    async with api.stream(
+        "GET", f"/api/runs/{LAUNCH}/stream?token={token}"
+    ) as response:
+        assert response.status_code == 200
 
 
 async def test_the_deployment_spend_ceiling_refuses_new_runs(api):

@@ -1,0 +1,24 @@
+# Netlify hosts the FRONT END only.
+#
+# The API cannot run here and this is not a configuration problem to solve.
+# The run endpoint holds a Server-Sent Events connection open for 60-120s while
+# four agents reason in parallel. Netlify Functions cap at 26s; Background
+# Functions return 202 immediately and cannot stream to a client; Edge
+# Functions are Deno and cannot run Python, FastAPI or LangGraph.
+#
+# Deploy api/ to a container host (Render, Railway, Fly) and point
+# VITE_API_BASE at its origin.
+
+[build]
+  base = "web"
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# Single-page app — every path serves the bundle.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

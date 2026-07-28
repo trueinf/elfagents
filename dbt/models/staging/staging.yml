@@ -1,0 +1,141 @@
+version: 2
+
+models:
+  - name: stg_launches
+    description: One row per launch record in the launch calendar.
+    columns:
+      - name: launch_id
+        description: Primary key. The identifier the signal hands to the orchestrator.
+        tests: [unique, not_null]
+      - name: sku_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_skus')
+                field: sku_id
+      - name: target_markets
+        description: Semicolon-delimited market codes, exploded in the marts layer.
+        tests: [not_null]
+      - name: countdown_weeks
+        description: Weeks to first ship. The deterministic gate trigger reads this.
+        tests: [not_null]
+
+  - name: stg_skus
+    description: One row per SKU.
+    columns:
+      - name: sku_id
+        tests: [unique, not_null]
+      - name: brand
+        tests: [not_null]
+
+  - name: stg_ingredients
+    description: >
+      One row per ingredient per market. annex_status separates an outright
+      prohibition from a conditional restriction — the distinction the
+      Regulatory agent has to interpret.
+    columns:
+      - name: ingredient_id
+        tests: [unique, not_null]
+      - name: annex_status
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["none", "annex_ii_prohibited", "annex_iii_restricted"]
+      - name: market
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["US", "DE", "UK"]
+
+  - name: stg_sku_ingredients
+    description: One row per SKU per ingredient, with the concentration in the current formula.
+    columns:
+      - name: concentration_pct
+        tests: [not_null]
+
+  - name: stg_notifications
+    description: >
+      Pre-market notification state per SKU per market. CPNP (EU) and SCPN (GB)
+      are separate portals requiring separate filings.
+    columns:
+      - name: portal
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["CPNP", "SCPN", "none"]
+      - name: status
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["complete", "in_progress", "not_started", "not_required"]
+
+  - name: stg_inventory
+    description: Units on hand against units required, per SKU per market.
+    columns:
+      - name: units_available
+        tests: [not_null]
+      - name: units_required
+        tests: [not_null]
+
+  - name: stg_trend_signals
+    description: Social trend window state per SKU — the Supply agent's cost-of-delay input.
+    columns:
+      - name: sku_id
+        tests: [unique, not_null]
+      - name: window_status
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["open", "cooling", "none"]
+
+  - name: stg_item_setup
+    description: >
+      One row per SKU per selling channel. compliance_dossier_status is a
+      retailer-side receiving condition, not a regulatory fact.
+    columns:
+      - name: status
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["complete", "in_progress", "not_started"]
+      - name: compliance_dossier_status
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["accepted", "pending", "not_required"]
+      - name: channel
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["retail", "dtc"]
+
+  - name: stg_artwork
+    description: Packaging artwork state per SKU per market.
+    columns:
+      - name: status
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["approved", "in_progress", "blocked", "not_started"]
+
+  - name: stg_labelling_requirements
+    description: One row per labelling requirement per SKU per market.
+    columns:
+      - name: status
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["met", "pending", "blocked"]
+
+  - name: stg_launch_history
+    description: Past launches, the decision taken, and the outcome.
+    columns:
+      - name: launch_id
+        tests: [unique, not_null]
+      - name: decision
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["go", "slip", "partial"]

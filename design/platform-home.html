@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>elfagent · Platform</title>
+<style>
+  :root{
+    --bg:#F4F1EE; --panel:#FFFFFF; --ink:#141210; --ink2:#2A2622; --muted:#6E655D; --faint:#A39A90;
+    --line:#E7E1DB; --line2:#D9D1C9;
+    --go:#1E7A54; --go-bg:#E7F4EC; --go-line:#B9E2CB;
+    --slip:#B4681A; --slip-bg:#FBEFDF; --slip-line:#EFD3B2;
+    --hold:#C0392B; --hold-bg:#FBEAE7; --hold-line:#F2CEC8;
+    --partial:#2B4ACB; --partial-bg:#EAEEFC; --partial-line:#C4D2F6;
+    --pink:#FF2D78; --pink-soft:#FFE1EC; --black:#141210;
+    --radius:16px; --radius-sm:10px;
+    --shadow:0 1px 2px rgba(20,16,12,.05),0 10px 30px rgba(20,16,12,.06);
+    --shadow-sm:0 1px 2px rgba(20,16,12,.05);
+    --font:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    --mono:'SF Mono',ui-monospace,'Cascadia Code',Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--bg);color:var(--ink);font-family:var(--font);-webkit-font-smoothing:antialiased;font-size:15px;line-height:1.5}
+  .app{display:grid;grid-template-columns:minmax(220px,260px) minmax(0,1fr);min-height:100vh}
+  .rail{background:var(--black);color:#EFE9E3;padding:22px 0;position:sticky;top:0;height:100vh;overflow:auto}
+  .brand{display:flex;align-items:center;gap:10px;padding:0 22px 22px;border-bottom:1px solid #262019;margin-bottom:8px}
+  .brand .dot{width:30px;height:30px;border-radius:9px;background:#fff;display:grid;place-items:center;color:var(--black);font-weight:800;font-size:16px;letter-spacing:-1px}
+  .brand b{font-weight:700;font-size:16px;letter-spacing:-.3px;color:#fff}
+  .brand span{color:#8B8178;font-size:11px;font-weight:500}
+  .rail-h{padding:16px 22px 8px;font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;color:#7C7269;font-weight:700}
+  .rlink{display:flex;align-items:center;gap:10px;padding:11px 22px;border-left:3px solid transparent;cursor:pointer;color:#C9C0B7;font-size:13.5px;font-weight:600}
+  .rlink:hover{background:#1D1813;color:#F4EFEA}
+  .rlink.active{background:#211B15;border-left-color:var(--pink);color:#fff}
+  .rlink .ic{width:18px;text-align:center;opacity:.8}
+  .rlink .tag{margin-left:auto;font-size:9px;font-weight:800;letter-spacing:.04em;padding:2px 6px;border-radius:5px}
+  .tag.live{background:var(--go-bg);color:var(--go)} .tag.soon{background:#241E18;color:#8B8178}
+
+  .main{padding:30px clamp(20px,4vw,56px) 70px;width:100%;max-width:1280px;margin:0 auto}
+  .crumb{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-bottom:22px;font-weight:500}
+  .crumb b{color:var(--ink2);font-weight:700}.crumb .sep{color:var(--line2)}
+  .crumb .bk{color:var(--partial);cursor:pointer;font-weight:700}
+
+  .stage{display:none}.stage.on{display:block;animation:fade .3s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+  /* ===== PLATFORM HOME ===== */
+  .hero-h{margin-bottom:28px}
+  .hero-h h1{font-size:27px;font-weight:800;letter-spacing:-.6px}
+  .hero-h .pink{color:var(--pink)}
+  .hero-h p{font-size:14.5px;color:var(--muted);margin-top:8px;max-width:680px;line-height:1.6}
+  .platnote{display:flex;gap:10px;align-items:center;margin-top:16px;padding:12px 16px;background:#EDE7E1;border-radius:11px;font-size:12.5px;color:var(--ink2);max-width:720px}
+  .platnote .b{width:26px;height:26px;border-radius:8px;background:var(--black);color:#fff;display:grid;place-items:center;font-size:13px;flex-shrink:0}
+  .platnote b{font-weight:700}
+
+  .uc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px;margin-top:26px}
+  .uc{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:22px;position:relative;transition:.15s;overflow:hidden}
+  .uc.live{cursor:pointer;border-color:var(--partial-line)}
+  .uc.live:hover{box-shadow:var(--shadow);transform:translateY(-2px)}
+  .uc.soon{opacity:.82}
+  .uc::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px}
+  .uc.live::before{background:var(--partial)} .uc.soon::before{background:var(--line2)}
+  .uc-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px}
+  .uc-name{font-size:17px;font-weight:750;letter-spacing:-.2px}
+  .uc-elf{font-size:12px;color:var(--pink);font-weight:700;margin-top:2px}
+  .status-tag{font-size:9.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:4px 9px;border-radius:20px}
+  .status-tag.live{background:var(--go-bg);color:var(--go)}
+  .status-tag.soon{background:#F0ECE8;color:var(--muted)}
+  .uc-desc{font-size:13px;color:var(--muted);line-height:1.55;margin-bottom:16px;min-height:40px}
+  .uc-anat{display:grid;grid-template-columns:1fr;gap:7px;padding-top:14px;border-top:1px solid var(--line)}
+  .anat-row{display:flex;gap:10px;font-size:11.5px;align-items:baseline}
+  .anat-row .lbl{color:var(--faint);font-weight:700;width:64px;flex-shrink:0;text-transform:uppercase;letter-spacing:.03em;font-size:10px}
+  .anat-row .val{color:var(--ink2);line-height:1.45}
+  .anat-row .val b{font-weight:650}
+  .uc-agents{display:flex;gap:5px;flex-wrap:wrap;margin-top:3px}
+  .apill{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:20px;background:#F2EEEA;color:var(--ink2)}
+  .apill.conflict{background:var(--slip-bg);color:var(--slip)}
+  .uc-cta{display:flex;align-items:center;gap:6px;margin-top:16px;font-size:12.5px;font-weight:700;color:var(--partial)}
+  .uc.soon .uc-cta{color:var(--faint)}
+
+  /* ===== USE CASE VIEW (condensed launch readiness recap + entry to deep view) ===== */
+  .runhead{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px}
+  .runhead h1{font-size:22px;font-weight:750;letter-spacing:-.4px}
+  .runhead .sku{font-size:11.5px;color:var(--faint);font-weight:700;letter-spacing:.03em;margin-bottom:5px}
+  .hero{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:26px 28px;margin-bottom:20px;position:relative;overflow:hidden}
+  .hero::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--partial)}
+  .hero-top{display:flex;justify-content:space-between;align-items:flex-start;gap:24px}
+  .hero .sku{font-size:11.5px;color:var(--faint);font-weight:700;margin-bottom:6px}
+  .hero h1{font-size:24px;font-weight:750;letter-spacing:-.5px}
+  .verdict{display:flex;align-items:baseline;gap:13px;margin:16px 0 8px}
+  .verdict .lbl{font-size:11px;color:var(--faint);font-weight:700;text-transform:uppercase;letter-spacing:.08em}
+  .verdict .big{font-size:26px;font-weight:800;letter-spacing:-.5px;color:var(--partial)}
+  .because{font-size:14.5px;color:var(--ink2);max-width:660px;line-height:1.6}.because b{font-weight:700;color:var(--ink)}
+  .actions{display:flex;flex-direction:column;gap:9px;width:168px;flex-shrink:0}
+  .btn{border:1.5px solid var(--line2);background:#fff;color:var(--ink);font-family:inherit;font-size:13px;font-weight:700;padding:11px 15px;border-radius:11px;cursor:pointer;text-align:center;transition:.12s}
+  .btn:hover{border-color:var(--faint)}
+  .btn.pink{background:var(--pink);border-color:var(--pink);color:#fff}.btn.pink:hover{filter:brightness(.94)}
+  .btn.ghost{background:transparent;border-color:transparent;color:var(--muted)}.btn.ghost:hover{background:#F2EEEA;color:var(--ink)}
+
+  .sec-h{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--faint);font-weight:750;margin:24px 2px 13px}
+  .agentstrip{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+  .astrip{border:1px solid var(--line);border-radius:12px;padding:15px;background:var(--panel);box-shadow:var(--shadow-sm);cursor:pointer;transition:.15s}
+  .astrip:hover{box-shadow:var(--shadow);transform:translateY(-2px);border-color:var(--partial-line)}
+  .astrip.dissent{border-color:var(--slip-line);background:linear-gradient(0deg,#FCF6EE,#fff)}
+  .astrip-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}
+  .astrip .an{font-size:13.5px;font-weight:750}
+  .astrip .lean{font-size:10px;font-weight:800;padding:2px 8px;border-radius:20px}
+  .lean.go{background:var(--go-bg);color:var(--go)}.lean.slip{background:var(--slip-bg);color:var(--slip)}.lean.partial{background:var(--partial-bg);color:var(--partial)}
+  .astrip p{font-size:11.5px;color:var(--muted);line-height:1.5;margin-bottom:10px}
+  .astrip .open{font-size:11px;font-weight:700;color:var(--partial);display:flex;align-items:center;gap:5px}
+  .astrip.dissent .db{font-size:9.5px;font-weight:800;text-transform:uppercase;color:var(--slip);letter-spacing:.04em}
+
+  /* ===== DEEP REGULATORY VIEW ===== */
+  .deep-head{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:24px 26px;margin-bottom:20px;position:relative;overflow:hidden}
+  .deep-head::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--slip)}
+  .deep-head .top{display:flex;justify-content:space-between;align-items:flex-start}
+  .deep-head h1{font-size:22px;font-weight:800;letter-spacing:-.4px;display:flex;align-items:center;gap:12px}
+  .deep-head .role{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--slip);background:var(--slip-bg);padding:4px 10px;border-radius:20px}
+  .deep-head .q{font-size:14px;color:var(--ink2);margin-top:10px;font-style:italic;max-width:640px;line-height:1.5}
+  .deep-head .metaline{display:flex;gap:20px;margin-top:16px;font-size:11.5px;color:var(--muted)}
+  .deep-head .metaline b{color:var(--ink2);font-weight:700}
+  .deep-lean{text-align:right;flex-shrink:0}
+  .deep-lean .l{font-size:20px;font-weight:800;color:var(--slip)}
+  .deep-lean .c{font-size:11px;color:var(--muted);font-weight:600;margin-top:2px}
+
+  .reason-flow{position:relative;padding-left:32px}
+  .reason-flow::before{content:"";position:absolute;left:11px;top:8px;bottom:8px;width:2px;background:var(--line2)}
+  .rstep{position:relative;margin-bottom:14px}
+  .rstep .node{position:absolute;left:-32px;top:2px;width:24px;height:24px;border-radius:50%;background:#fff;border:2px solid var(--slip);display:grid;place-items:center;font-size:11px;font-weight:800;color:var(--slip);z-index:1}
+  .rstep .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow-sm)}
+  .rstep .st{font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin-bottom:7px}
+  .rstep h4{font-size:14px;font-weight:750;margin-bottom:6px}
+  .rstep p{font-size:12.5px;color:var(--ink2);line-height:1.6}
+  .rstep p b{font-weight:700}
+
+  /* tool call rows */
+  .toolcall{background:#FAF8F6;border:1px solid var(--line);border-radius:9px;padding:11px 13px;margin-top:9px;font-family:var(--mono);font-size:11.5px}
+  .toolcall .call{color:var(--ink2);font-weight:600}
+  .toolcall .arrow{color:var(--faint);margin:0 6px}
+  .toolcall .result{color:var(--go)}
+  .toolcall .result.bad{color:var(--hold)}
+  .toolcall .dur{color:var(--faint);float:right}
+
+  /* the judgment table */
+  .judge{background:#fff;border:1px solid var(--line);border-radius:11px;overflow:hidden;margin-top:10px}
+  .jrow{display:grid;grid-template-columns:70px 1fr 1fr 110px;gap:12px;padding:11px 14px;border-bottom:1px solid var(--line);font-size:12px;align-items:center}
+  .jrow:last-child{border-bottom:none}
+  .jrow.head{background:#F7F4F1;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);font-weight:700}
+  .jrow .mk{font-weight:800}
+  .jrow .val{color:var(--ink2);font-family:var(--mono);font-size:11px}
+  .jverdict{font-size:10px;font-weight:800;padding:3px 9px;border-radius:20px;text-align:center}
+  .jverdict.ok{background:var(--go-bg);color:var(--go)}
+  .jverdict.hard{background:var(--hold-bg);color:var(--hold)}
+  .jverdict.cond{background:var(--slip-bg);color:var(--slip)}
+
+  .payload{background:#141210;color:#D9F2E4;border-radius:11px;padding:16px 18px;font-family:var(--mono);font-size:11.5px;line-height:1.7;margin-top:10px;overflow:auto;white-space:pre}
+  .payload .k{color:#88B8FF}.payload .s{color:#FFC96B}.payload .n{color:#7FE3B0}
+  .callout{display:flex;gap:12px;padding:14px 16px;background:var(--partial-bg);border-radius:11px;margin-top:12px;font-size:12.5px;color:var(--ink2);line-height:1.6}
+  .callout .i{flex-shrink:0;font-size:16px}
+  .callout b{color:var(--partial);font-weight:700}
+
+  /* ===== RESPONSIVE ===== */
+  /* tablet / small laptop: collapse the fixed sidebar into a top bar */
+  @media (max-width: 900px){
+    .app{grid-template-columns:1fr}
+    .rail{position:static;height:auto;display:flex;flex-wrap:wrap;align-items:center;gap:4px 2px;padding:12px 10px;overflow:visible}
+    .rail .brand{padding:0 14px 0 8px;margin:0;border-bottom:none;border-right:1px solid #262019;flex-shrink:0}
+    .rail .brand br{display:none}
+    .rail .brand span{display:none}
+    .rail-h{display:none}
+    .rlink{border-left:none;border-radius:9px;padding:8px 12px;font-size:12.5px;flex:0 0 auto}
+    .rlink.active{border-left:none;background:#211B15}
+    .rlink .ic{display:none}
+    .main{padding:22px 20px 60px}
+    .hero-top{flex-direction:column}
+    .actions{flex-direction:row;width:100%}
+    .actions .btn{flex:1}
+    .deep-head .top{flex-direction:column;gap:12px}
+    .deep-lean{text-align:left}
+    .jrow{grid-template-columns:52px 1fr 1fr 84px;gap:8px;font-size:11px}
+  }
+  /* phone */
+  @media (max-width: 560px){
+    .main{padding:18px 14px 50px}
+    .hero-h h1{font-size:22px}
+    .runhead h1,.hero h1,.deep-head h1{font-size:19px}
+    .verdict{flex-wrap:wrap;gap:6px}
+    .verdict .big{font-size:22px}
+    .payload{font-size:10.5px}
+    .reason-flow{padding-left:26px}
+    .rstep .node{left:-26px;width:20px;height:20px;font-size:10px}
+    .toolcall{font-size:10.5px}
+    .toolcall .dur{display:none}
+    .jrow{grid-template-columns:44px 1fr 74px;gap:6px}
+    .jrow .val:nth-child(3){display:none}      /* drop the notification column on very small screens */
+    .jrow.head span:nth-child(3){display:none}
+    .metaline{flex-wrap:wrap;gap:8px 16px}
+    .deep-head .metaline{flex-wrap:wrap}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail">
+    <div class="brand"><div class="dot">e</div><div><b>elfagent</b><br><span>ORCHESTRATION PLATFORM</span></div></div>
+    <div class="rail-h">Platform</div>
+    <div class="rlink active" onclick="go('home',this)"><span class="ic">▦</span> Use cases</div>
+    <div class="rail-h">Live</div>
+    <div class="rlink" onclick="go('uc',this)"><span class="ic">◉</span> Launch Readiness <span class="tag live">LIVE</span></div>
+    <div class="rail-h">Roadmap</div>
+    <div class="rlink" onclick="go('home',this)"><span class="ic">○</span> Campaign-to-Shelf <span class="tag soon">SOON</span></div>
+    <div class="rlink" onclick="go('home',this)"><span class="ic">○</span> Brand Authority <span class="tag soon">SOON</span></div>
+    <div class="rlink" onclick="go('home',this)"><span class="ic">○</span> Deduction Disposition <span class="tag soon">SOON</span></div>
+  </aside>
+
+  <main class="main">
+    <!-- ===== HOME ===== -->
+    <section class="stage on" id="home">
+      <div class="crumb"><b>elfagent</b><span class="sep">/</span><span>Use cases</span></div>
+      <div class="hero-h">
+        <h1>One orchestration engine. <span class="pink">Four decisions.</span></h1>
+        <p>elfagent runs a named orchestrator over a set of specialist agents that reason in parallel, genuinely disagree, and hand a reconciled recommendation to a human. The same engine drives every use case below — each is a different set of specialists and data, not a different system.</p>
+        <div class="platnote"><div class="b">e</div><div><b>One built deep, three configured.</b> Launch Readiness is live and fully built. The other three are designed on the same platform — same orchestrator, same typed contracts, same trace — and shown here as the roadmap.</div></div>
+      </div>
+
+      <div class="uc-grid">
+        <!-- LIVE -->
+        <div class="uc live" onclick="go('uc')">
+          <div class="uc-top">
+            <div><div class="uc-name">Launch Readiness</div><div class="uc-elf">Launch e.l.f.gible</div></div>
+            <span class="status-tag live">● Live</span>
+          </div>
+          <div class="uc-desc">Should this launch go, slip, or ship partially? Reconciles regulatory, supply, retail and packaging readiness across markets at the go-to-market gate.</div>
+          <div class="uc-anat">
+            <div class="anat-row"><span class="lbl">Trigger</span><span class="val">Launch reaches T-4 weeks at its Stage-Gate</span></div>
+            <div class="anat-row"><span class="lbl">Agents</span><span class="val uc-agents"><span class="apill conflict">Regulatory</span><span class="apill">Supply</span><span class="apill">Retailer</span><span class="apill">Packaging</span></span></div>
+            <div class="anat-row"><span class="lbl">Conflict</span><span class="val">Legal gate vs. open trend window — go/slip/partial</span></div>
+            <div class="anat-row"><span class="lbl">Owner</span><span class="val">Director of Commercialization</span></div>
+          </div>
+          <div class="uc-cta">Open live use case →</div>
+        </div>
+
+        <!-- SOON: Campaign-to-Shelf -->
+        <div class="uc soon">
+          <div class="uc-top">
+            <div><div class="uc-name">Campaign-to-Shelf</div><div class="uc-elf">e.l.f.-lignment</div></div>
+            <span class="status-tag soon">Roadmap</span>
+          </div>
+          <div class="uc-desc">A social spike breaks — amplify, reallocate inventory, or hold? Reconciles social signal, sell-through and inventory across channels.</div>
+          <div class="uc-anat">
+            <div class="anat-row"><span class="lbl">Trigger</span><span class="val">Social velocity breaches a threshold</span></div>
+            <div class="anat-row"><span class="lbl">Agents</span><span class="val uc-agents"><span class="apill">Social-signal</span><span class="apill">Sell-through</span><span class="apill">Inventory</span></span></div>
+            <div class="anat-row"><span class="lbl">Conflict</span><span class="val">Real demand vs. one-off spike vs. stock-out risk</span></div>
+            <div class="anat-row"><span class="lbl">Owner</span><span class="val">Commercial / DTC lead</span></div>
+          </div>
+          <div class="uc-cta">Same engine · not yet built</div>
+        </div>
+
+        <!-- SOON: Brand Authority -->
+        <div class="uc soon">
+          <div class="uc-top">
+            <div><div class="uc-name">Brand Authority in LLMs</div><div class="uc-elf">e.l.f.-luminate</div></div>
+            <span class="status-tag soon">Roadmap</span>
+          </div>
+          <div class="uc-desc">Citation share for a category is slipping in AI answers — which remediation to fund? Reconciles visibility, owned content, earned authority and retailer data.</div>
+          <div class="uc-anat">
+            <div class="anat-row"><span class="lbl">Trigger</span><span class="val">LLM-visibility crawl drops below threshold</span></div>
+            <div class="anat-row"><span class="lbl">Agents</span><span class="val uc-agents"><span class="apill">Visibility</span><span class="apill">Owned-content</span><span class="apill">Authority</span><span class="apill">Syndication</span></span></div>
+            <div class="anat-row"><span class="lbl">Conflict</span><span class="val">Different root causes → different owners & costs</span></div>
+            <div class="anat-row"><span class="lbl">Owner</span><span class="val">Digital / agentic-commerce team</span></div>
+          </div>
+          <div class="uc-cta">Same engine · not yet built</div>
+        </div>
+
+        <!-- SOON: Deduction -->
+        <div class="uc soon">
+          <div class="uc-top">
+            <div><div class="uc-name">Deduction Disposition</div><div class="uc-elf">e.l.f.-solve</div></div>
+            <span class="status-tag soon">Roadmap</span>
+          </div>
+          <div class="uc-desc">A retailer deduction posts — accept, dispute, or investigate? Reconciles claim validity, root cause, recovery economics and the account relationship.</div>
+          <div class="uc-anat">
+            <div class="anat-row"><span class="lbl">Trigger</span><span class="val">New deduction posts from a retailer portal</span></div>
+            <div class="anat-row"><span class="lbl">Agents</span><span class="val uc-agents"><span class="apill">Validity</span><span class="apill">Root-cause</span><span class="apill">Economics</span><span class="apill">Relationship</span></span></div>
+            <div class="anat-row"><span class="lbl">Conflict</span><span class="val">Worth disputing vs. account-relationship cost</span></div>
+            <div class="anat-row"><span class="lbl">Owner</span><span class="val">Finance / AR</span></div>
+          </div>
+          <div class="uc-cta">Same engine · not yet built</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== USE CASE (condensed) ===== -->
+    <section class="stage" id="uc">
+      <div class="crumb"><span class="bk" onclick="go('home')">elfagent</span><span class="sep">/</span><b>Launch Readiness</b><span class="sep">/</span><span>LAUNCH-1001</span></div>
+      <div class="hero">
+        <div class="hero-top">
+          <div>
+            <div class="sku">LAUNCH-1001 · e.l.f. SKIN · reconciled by e.l.f.orchestra from 4 parallel specialists</div>
+            <h1>Bright Reset Vitamin-C Serum</h1>
+            <div class="verdict"><span class="lbl">Recommendation</span><span class="big">Partial launch</span></div>
+            <p class="because">Ship <b>US and UK</b> now; hold <b>Germany</b> for the reformulated version. Germany carries a hard regulatory gate that outweighs the open trend window.</p>
+          </div>
+          <div class="actions"><button class="btn pink">Approve partial</button><button class="btn">Override…</button><button class="btn ghost">Hold all</button></div>
+        </div>
+      </div>
+
+      <div class="sec-h">What each specialist decided — click any agent to see exactly how it reasoned</div>
+      <div class="agentstrip">
+        <div class="astrip dissent" onclick="go('deep')" style="border-color:var(--slip-line)">
+          <div class="astrip-top"><span class="an">Regulatory</span><span class="lean slip">Slip DE · Go UK</span></div>
+          <p>DE breaches the EU concentration limit and CPNP is pending; UK clears on its own filing.</p>
+          <span class="open">See how it reasoned →</span>
+        </div>
+        <div class="astrip dissent">
+          <div class="astrip-top"><span class="an">Supply</span><span class="lean go">Go</span></div>
+          <p>Units positioned everywhere; trend window open — every week of delay forfeits velocity.</p>
+          <span class="db">▎dissented — preserved</span>
+        </div>
+        <div class="astrip">
+          <div class="astrip-top"><span class="an">Retailer</span><span class="lean partial">Partial</span></div>
+          <p>Channels ready everywhere and relationships independent — partial launch is coherent.</p>
+          <span class="open">See how it reasoned →</span>
+        </div>
+        <div class="astrip">
+          <div class="astrip-top"><span class="an">Packaging</span><span class="lean slip">Slip DE</span></div>
+          <p>DE artwork is the long pole — new INCI labelling for the reformulated EU version.</p>
+          <span class="open">See how it reasoned →</span>
+        </div>
+      </div>
+      <div class="callout" style="margin-top:20px"><span class="i">◉</span><div>The <b>Regulatory</b> agent is the one to open first — it's where the genuine judgment lives (a conditional restriction, not a simple ban). Click it above.</div></div>
+    </section>
+
+    <!-- ===== DEEP REGULATORY REASONING ===== -->
+    <section class="stage" id="deep">
+      <div class="crumb"><span class="bk" onclick="go('home')">elfagent</span><span class="sep">/</span><span class="bk" onclick="go('uc')">Launch Readiness</span><span class="sep">/</span><b>Regulatory agent</b></div>
+
+      <div class="deep-head">
+        <div class="top">
+          <div>
+            <h1>Regulatory <span class="role">Specialist agent</span></h1>
+            <div class="q">Remit: is this SKU legally clear to ship in each target market — and where it isn't, is the gate a hard block or a conditional one?</div>
+            <div class="metaline"><span><b>6</b> tool calls</span><span><b>1,240</b> tokens</span><span><b>1,847ms</b> elapsed</span><span>contract: <b>RegulatoryFinding</b></span></div>
+          </div>
+          <div class="deep-lean"><div class="l">Slip DE · Go UK</div><div class="c">confidence 0.80</div></div>
+        </div>
+      </div>
+
+      <div class="sec-h">How it reasoned — step by step</div>
+      <div class="reason-flow">
+        <!-- step 1 -->
+        <div class="rstep">
+          <div class="node">1</div>
+          <div class="card">
+            <div class="st">Received from e.l.f.orchestra</div>
+            <h4>Launch context for LAUNCH-1001</h4>
+            <p>The orchestrator dispatched the launch with its SKU, formula, and three target markets — <b>US, DE, UK</b>. The agent's job is scoped to legal clearance only; it does not look at supply, artwork, or retail. It reasons over each market independently.</p>
+          </div>
+        </div>
+        <!-- step 2 -->
+        <div class="rstep">
+          <div class="node">2</div>
+          <div class="card">
+            <div class="st">Called its tools · deterministic lookups against the warehouse</div>
+            <h4>Pulled ingredient limits and notification status per market</h4>
+            <p>These are <b>tools</b>, not reasoning — each returns a fact from the data. The agent issued six calls across the three markets:</p>
+            <div class="toolcall"><span class="call">get_ingredient_restrictions(sku, "DE")</span><span class="arrow">→</span><span class="result bad">Ascorbic Acid · Annex III · limit 20%</span><span class="dur">34ms</span></div>
+            <div class="toolcall"><span class="call">get_ingredient_restrictions(sku, "UK")</span><span class="arrow">→</span><span class="result">Ascorbic Acid · limit 25%</span><span class="dur">28ms</span></div>
+            <div class="toolcall"><span class="call">get_ingredient_restrictions(sku, "US")</span><span class="arrow">→</span><span class="result">no federal concentration limit</span><span class="dur">22ms</span></div>
+            <div class="toolcall"><span class="call">get_notification_status(sku, "DE")</span><span class="arrow">→</span><span class="result bad">CPNP · in_progress</span><span class="dur">19ms</span></div>
+            <div class="toolcall"><span class="call">get_notification_status(sku, "UK")</span><span class="arrow">→</span><span class="result">SCPN · complete</span><span class="dur">18ms</span></div>
+            <div class="toolcall"><span class="call">get_notification_status(sku, "US")</span><span class="arrow">→</span><span class="result">not required (MoCRA listing)</span><span class="dur">17ms</span></div>
+          </div>
+        </div>
+        <!-- step 3 -->
+        <div class="rstep">
+          <div class="node">3</div>
+          <div class="card">
+            <div class="st">Reasoned over the facts · this is the judgment, not a lookup</div>
+            <h4>Weighed each market against two independent gates</h4>
+            <p>The agent compared the SKU's actual concentration (<b>22%</b>) against each market's limit, and checked whether the pre-market notification was complete. Crucially, it applied the <b>Annex III nuance</b>: an exceedance here is a <i>conditional</i> restriction (fixable by reformulation), not an outright ban — so it's a hard gate <i>for this formula</i>, but not a permanent prohibition.</p>
+            <div class="judge">
+              <div class="jrow head"><span>Market</span><span>Ingredient gate</span><span>Notification gate</span><span>Verdict</span></div>
+              <div class="jrow"><span class="mk">US</span><span class="val">22% · no limit</span><span class="val">not required</span><span class="jverdict ok">clear</span></div>
+              <div class="jrow"><span class="mk">UK</span><span class="val">22% &lt; 25% ✓</span><span class="val">SCPN complete</span><span class="jverdict ok">clear</span></div>
+              <div class="jrow"><span class="mk">DE</span><span class="val">22% &gt; 20% ✕</span><span class="val">CPNP in_progress</span><span class="jverdict hard">hard gate</span></div>
+            </div>
+            <div class="callout"><span class="i">⚖</span><div>This is the reasoning a lookup can't do: recognizing that <b>the same 22% is compliant in the UK and blocking in Germany</b>, and that the German block is conditional (reformulate) rather than absolute. That judgment is why this is an <b>agent</b>, not a tool.</div></div>
+          </div>
+        </div>
+        <!-- step 4 -->
+        <div class="rstep">
+          <div class="node">4</div>
+          <div class="card">
+            <div class="st">Emitted a typed finding back to e.l.f.orchestra</div>
+            <h4>Returned a schema-validated RegulatoryFinding</h4>
+            <p>The reasoning is compressed into a typed object the orchestrator can trust — no free-form prose crosses the boundary. The <b>per_market</b> array and <b>hard_gate_markets</b> are what let the orchestrator reconcile against the other three specialists.</p>
+            <div class="payload">{
+  <span class="k">"agent"</span>: <span class="s">"regulatory"</span>,
+  <span class="k">"lean"</span>: <span class="s">"slip"</span>,
+  <span class="k">"confidence"</span>: <span class="n">0.80</span>,
+  <span class="k">"hard_gate_markets"</span>: [<span class="s">"DE"</span>],
+  <span class="k">"per_market"</span>: [
+    { <span class="k">"market"</span>:<span class="s">"US"</span>, <span class="k">"ready"</span>:<span class="n">true</span>,  <span class="k">"gate_type"</span>:<span class="n">null</span> },
+    { <span class="k">"market"</span>:<span class="s">"UK"</span>, <span class="k">"ready"</span>:<span class="n">true</span>,  <span class="k">"gate_type"</span>:<span class="n">null</span> },
+    { <span class="k">"market"</span>:<span class="s">"DE"</span>, <span class="k">"ready"</span>:<span class="n">false</span>, <span class="k">"gate_type"</span>:<span class="s">"hard"</span> }
+  ],
+  <span class="k">"evidence"</span>: [
+    <span class="s">"DE: Ascorbic Acid 22% > Annex III limit 20% (conditional — reformulation)"</span>,
+    <span class="s">"DE: CPNP notification in_progress"</span>,
+    <span class="s">"UK: 22% < 25% limit; SCPN complete"</span>
+  ],
+  <span class="k">"semantic_version"</span>: <span class="s">"launch_ready@v3"</span>
+}</div>
+          </div>
+        </div>
+      </div>
+      <div class="callout" style="margin-top:8px"><span class="i">🔎</span><div>Want the raw execution instead of this narrative? <b>Open the full trace</b> from the decision view to see spans, latencies, and the same run in LangSmith.</div></div>
+    </section>
+  </main>
+</div>
+
+<script>
+  function go(id,el){
+    document.querySelectorAll('.stage').forEach(s=>s.classList.toggle('on',s.id===id));
+    if(el){document.querySelectorAll('.rlink').forEach(l=>l.classList.remove('active'));}
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
+</script>
+</body>
+</html>

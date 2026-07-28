@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>elfagent · Launch Readiness</title>
+<style>
+  :root{
+    --bg:#F4F1EE; --panel:#FFFFFF; --ink:#141210; --ink2:#2A2622; --muted:#6E655D; --faint:#A39A90;
+    --line:#E7E1DB; --line2:#D9D1C9;
+    --go:#1E7A54; --go-bg:#E7F4EC; --go-line:#B9E2CB;
+    --slip:#B4681A; --slip-bg:#FBEFDF; --slip-line:#EFD3B2;
+    --hold:#C0392B; --hold-bg:#FBEAE7; --hold-line:#F2CEC8;
+    --partial:#2B4ACB; --partial-bg:#EAEEFC; --partial-line:#C4D2F6;
+    --pink:#FF2D78; --pink-soft:#FFE1EC;
+    --black:#141210;
+    --radius:16px; --radius-sm:10px;
+    --shadow:0 1px 2px rgba(20,16,12,.05),0 10px 30px rgba(20,16,12,.06);
+    --shadow-sm:0 1px 2px rgba(20,16,12,.05);
+    --font:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    --mono:'SF Mono',ui-monospace,'Cascadia Code',Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--bg);color:var(--ink);font-family:var(--font);-webkit-font-smoothing:antialiased;font-size:15px;line-height:1.5}
+  .app{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
+
+  .rail{background:var(--black);color:#EFE9E3;padding:22px 0;position:sticky;top:0;height:100vh;overflow:auto}
+  .brand{display:flex;align-items:center;gap:10px;padding:0 22px 22px;border-bottom:1px solid #262019;margin-bottom:8px}
+  .brand .dot{width:30px;height:30px;border-radius:9px;background:#fff;display:grid;place-items:center;color:var(--black);font-weight:800;font-size:16px;letter-spacing:-1px}
+  .brand b{font-weight:700;font-size:16px;letter-spacing:-.3px;color:#fff}
+  .brand span{color:#8B8178;font-size:11px;font-weight:500;letter-spacing:.02em}
+  .rail-h{padding:16px 22px 8px;font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;color:#7C7269;font-weight:700}
+  .launch{display:block;padding:12px 22px;border-left:3px solid transparent;cursor:pointer;text-decoration:none;color:inherit;transition:.12s}
+  .launch:hover{background:#1D1813}
+  .launch.active{background:#211B15;border-left-color:var(--pink)}
+  .launch .id{font-size:10.5px;color:#8B8178;font-weight:700;letter-spacing:.04em}
+  .launch .nm{font-size:13.5px;font-weight:600;margin:3px 0 5px;letter-spacing:-.1px;color:#F4EFEA}
+  .launch .meta{display:flex;align-items:center;gap:7px;font-size:11px;color:#8B8178}
+  .chip{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:20px;font-size:10.5px;font-weight:700;line-height:1.5}
+  .chip .d{width:6px;height:6px;border-radius:50%}
+  .chip.go{background:var(--go-bg);color:var(--go)} .chip.go .d{background:var(--go)}
+  .chip.slip{background:var(--slip-bg);color:var(--slip)} .chip.slip .d{background:var(--slip)}
+  .chip.partial{background:var(--partial-bg);color:var(--partial)} .chip.partial .d{background:var(--partial)}
+  .chip.pending{background:#241E18;color:#8B8178} .chip.pending .d{background:#5C554D}
+
+  .main{padding:24px 36px 70px;max-width:1220px}
+  .crumb{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-bottom:18px;font-weight:500}
+  .crumb b{color:var(--ink2);font-weight:700}.crumb .sep{color:var(--line2)}
+  .stagepill{margin-left:4px;padding:3px 10px;border-radius:20px;background:var(--black);font-size:10.5px;font-weight:700;color:#F4EFEA}
+  .viewbar{display:flex;gap:6px;margin-bottom:18px;padding:5px;background:#EAE4DD;border-radius:12px;width:fit-content}
+  .viewbar button{border:none;background:transparent;font-family:inherit;font-size:12.5px;font-weight:650;color:var(--muted);padding:7px 14px;border-radius:8px;cursor:pointer}
+  .viewbar button.on{background:#fff;color:var(--ink);box-shadow:var(--shadow-sm)}
+  .stage{display:none}.stage.on{display:block;animation:fade .35s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.8)}}
+
+  .runhead{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px}
+  .runhead h1{font-size:22px;font-weight:700;letter-spacing:-.4px}
+  .runhead .sku{font-size:11.5px;color:var(--faint);font-weight:700;letter-spacing:.03em;margin-bottom:5px}
+
+  /* ===== ORCHESTRATOR as a named, visible conductor ===== */
+  .conductor{background:var(--black);color:#F4EFEA;border-radius:var(--radius);padding:20px 24px;margin-bottom:0;display:flex;align-items:center;gap:18px;position:relative;overflow:hidden;box-shadow:var(--shadow)}
+  .conductor::after{content:"";position:absolute;right:-30px;top:-50px;width:200px;height:200px;background:radial-gradient(circle,rgba(255,45,120,.18),transparent 70%);pointer-events:none}
+  .cbadge{width:52px;height:52px;border-radius:14px;background:linear-gradient(135deg,#2A2018,#151210);border:1px solid #33291f;display:grid;place-items:center;flex-shrink:0;position:relative}
+  .cbadge .ring{position:absolute;inset:-4px;border-radius:16px;border:2px solid var(--pink);opacity:0;animation:none}
+  .conductor.busy .cbadge .ring{animation:cring 1.4s infinite}
+  @keyframes cring{0%{opacity:.6;transform:scale(.9)}100%{opacity:0;transform:scale(1.15)}}
+  .cbadge b{font-size:20px;font-weight:800;color:#fff}
+  .cmeta{flex:1;z-index:1}
+  .cmeta .cn{font-size:15px;font-weight:750;color:#fff;letter-spacing:-.2px;display:flex;align-items:center;gap:9px}
+  .cmeta .cn .role{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--pink);background:rgba(255,45,120,.14);padding:3px 9px;border-radius:20px}
+  .cmeta .cnarr{font-size:12.5px;color:#B7ADA3;margin-top:5px;min-height:18px;font-family:var(--mono)}
+  .cstat{text-align:right;z-index:1;flex-shrink:0}
+  .cstat .big{font-size:13px;font-weight:750;color:#fff}
+  .cstat .sub{font-size:11px;color:#8B8178;margin-top:2px}
+
+  /* hub-and-spoke canvas */
+  .canvas{background:var(--panel);border:1px solid var(--line);border-top:none;border-radius:0 0 var(--radius) var(--radius);padding:10px 24px 24px;margin-bottom:20px;box-shadow:var(--shadow)}
+  .spokelabel{text-align:center;font-size:11px;color:var(--faint);font-weight:700;letter-spacing:.04em;padding:14px 0 6px}
+  .spokelabel b{color:var(--muted)}
+  .lanes{display:flex;flex-direction:column;gap:11px}
+  .lane{display:grid;grid-template-columns:150px 1fr;align-items:stretch;gap:0;position:relative}
+  .spoke{position:relative;display:flex;align-items:center}
+  .spoke .wire{height:2px;width:100%;background:var(--line2);transition:.3s}
+  .spoke .dispatch,.spoke .collect{position:absolute;width:7px;height:7px;border-radius:50%;background:var(--pink);top:50%;transform:translateY(-50%);opacity:0}
+  .lane.dispatching .wire{background:linear-gradient(90deg,var(--pink),var(--line2))}
+  .lane.running .wire{background:var(--pink)}
+  .lane.done .wire{background:var(--go)}
+  .lane.dispatching .dispatch{opacity:1;animation:travel 0.6s ease forwards}
+  @keyframes travel{from{left:0}to{left:calc(100% - 7px)}}
+  .lane.done .collect{opacity:1;left:0;animation:travelback .6s ease forwards}
+  @keyframes travelback{from{left:calc(100% - 7px)}to{left:0}}
+
+  .acard{border:1.5px solid var(--line);border-radius:12px;padding:14px 16px;background:#fff;transition:.3s}
+  .lane.idle .acard{opacity:.5}
+  .lane.dispatching .acard{opacity:.7}
+  .lane.running .acard{border-color:var(--pink);box-shadow:0 0 0 3px rgba(255,45,120,.08)}
+  .lane.done .acard{border-color:var(--go-line)}
+  .acard .row1{display:flex;align-items:center;gap:12px}
+  .acard .aname{font-size:14px;font-weight:750;width:96px;flex-shrink:0}
+  .acard .aq{font-size:12px;color:var(--muted);flex:1;line-height:1.4;font-style:italic}
+  .acard .astate{font-size:11px;font-weight:700;flex-shrink:0;display:flex;align-items:center;gap:6px}
+  .astate.idle{color:var(--faint)}.astate.dispatching{color:var(--pink)}.astate.running{color:var(--pink)}.astate.done{color:var(--go)}
+  .astate .d{width:6px;height:6px;border-radius:50%;background:currentColor}
+  .lane.running .astate .d{animation:pulse 1s infinite}
+  .acard .alean{font-size:11px;font-weight:800;padding:2px 10px;border-radius:20px;flex-shrink:0}
+  .alean.go{background:var(--go-bg);color:var(--go)}.alean.slip{background:var(--slip-bg);color:var(--slip)}.alean.partial{background:var(--partial-bg);color:var(--partial)}
+  .acard .found{font-size:12px;color:var(--ink2);line-height:1.5;margin-top:9px;padding-top:9px;border-top:1px dashed var(--line);display:none}
+  .lane.done .acard .found{display:block}
+  .runctl{display:flex;justify-content:center;gap:12px;margin-top:20px}
+  .btn{border:1.5px solid var(--line2);background:#fff;color:var(--ink);font-family:inherit;font-size:13.5px;font-weight:700;padding:11px 16px;border-radius:11px;cursor:pointer;transition:.12s;text-align:center}
+  .btn:hover{border-color:var(--faint)}
+  .btn.primary{background:var(--black);color:#fff;border-color:var(--black)}.btn.primary:hover{background:#000}
+  .btn.pink{background:var(--pink);border-color:var(--pink);color:#fff}.btn.pink:hover{filter:brightness(.94)}
+  .btn.ghost{background:transparent;border-color:transparent;color:var(--muted)}.btn.ghost:hover{background:#F2EEEA;color:var(--ink)}
+
+  /* ===== DECISION ===== */
+  .hero{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:28px 30px;margin-bottom:20px;position:relative;overflow:hidden}
+  .hero::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--partial)}
+  .hero-top{display:flex;justify-content:space-between;align-items:flex-start;gap:24px}
+  .hero .sku{font-size:11.5px;color:var(--faint);font-weight:700;letter-spacing:.03em;margin-bottom:6px}
+  .hero h1{font-size:25px;font-weight:750;letter-spacing:-.5px;line-height:1.2}
+  .verdict{display:flex;align-items:baseline;gap:13px;margin:18px 0 8px}
+  .verdict .lbl{font-size:11px;color:var(--faint);font-weight:700;text-transform:uppercase;letter-spacing:.08em}
+  .verdict .big{font-size:28px;font-weight:800;letter-spacing:-.6px;color:var(--partial)}
+  .because{font-size:15px;color:var(--ink2);max-width:680px;line-height:1.6}.because b{font-weight:700;color:var(--ink)}
+  .conf{display:flex;align-items:center;gap:10px;margin-top:18px;font-size:12px;color:var(--muted);font-weight:600}
+  .conf .bar{width:130px;height:7px;border-radius:4px;background:#EDE8E4;overflow:hidden}.conf .fill{height:100%;width:61%;background:var(--partial)}
+  .actions{display:flex;flex-direction:column;gap:9px;flex-shrink:0;width:172px}
+
+  .sec-h{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--faint);font-weight:750;margin:26px 2px 13px}
+  .markets{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .mkt{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:20px;position:relative;overflow:hidden}
+  .mkt::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px}
+  .mkt.go::before{background:var(--go)}.mkt.slip::before{background:var(--slip)}
+  .mkt-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+  .mkt .flag{font-size:15px;font-weight:700;display:flex;align-items:center;gap:9px}
+  .mkt .flag .code{width:28px;height:20px;border-radius:5px;display:grid;place-items:center;font-size:10px;font-weight:800;color:#fff}
+  .code.us{background:#2B4ACB}.code.de{background:#141210}.code.uk{background:#8A2B3A}
+  .mkt .reasons{list-style:none;display:flex;flex-direction:column;gap:9px}
+  .mkt .reasons li{font-size:12.5px;color:var(--muted);display:flex;gap:9px;line-height:1.45}
+  .mkt .reasons li .i{flex-shrink:0;width:16px;height:16px;border-radius:50%;display:grid;place-items:center;font-size:9px;font-weight:800;margin-top:1px}
+  .i.ok{background:var(--go-bg);color:var(--go)}.i.no{background:var(--hold-bg);color:var(--hold)}.i.warn{background:var(--slip-bg);color:var(--slip)}
+  .mkt.go .reasons li{color:var(--go)}
+
+  .contested{background:linear-gradient(0deg,#FCF4EA,#FEFBF7);border:1.5px solid var(--slip-line);border-radius:var(--radius);padding:20px 22px;margin-top:16px;display:flex;gap:15px;align-items:flex-start}
+  .contested .ic{flex-shrink:0;width:34px;height:34px;border-radius:10px;background:var(--slip-bg);color:var(--slip);display:grid;place-items:center;font-size:17px}
+  .contested h4{font-size:14px;font-weight:750;margin-bottom:5px}.contested p{font-size:13px;color:var(--ink2);line-height:1.6}.contested b{font-weight:750}
+
+  .orch{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow-sm);margin-top:24px;overflow:hidden}
+  .orch-head{padding:18px 22px;display:flex;justify-content:space-between;align-items:center;cursor:pointer}
+  .orch-head:hover{background:#FBF9F7}
+  .orch-head .l{display:flex;align-items:center;gap:13px}
+  .orch-head .t{font-size:14px;font-weight:750}.orch-head .s{font-size:12px;color:var(--muted);margin-top:2px}
+  .flow{display:flex;align-items:center;gap:5px}
+  .fnode{width:9px;height:9px;border-radius:50%;background:var(--go)}.fnode.orc{width:12px;height:12px;background:var(--black)}
+  .fline{width:13px;height:2px;background:var(--line2)}
+  .caret{color:var(--faint);font-size:13px;transition:.2s;margin-left:6px}.orch.open .caret{transform:rotate(90deg)}
+  .orch-body{display:none;border-top:1px solid var(--line);padding:22px}.orch.open .orch-body{display:block}
+
+  /* per-agent DECISION STORY cards */
+  .stories{display:flex;flex-direction:column;gap:10px}
+  .story{border:1px solid var(--line);border-radius:12px;padding:16px 18px;background:#FCFBFA;display:grid;grid-template-columns:120px 1fr 150px;gap:18px;align-items:center}
+  .story.dissent{border-color:var(--slip-line);background:linear-gradient(0deg,#FCF6EE,#FDFBF8)}
+  .story .who{display:flex;flex-direction:column;gap:6px}
+  .story .who .nm{font-size:14px;font-weight:750}
+  .story .who .lean{font-size:11px;font-weight:800;padding:2px 9px;border-radius:20px;width:fit-content}
+  .story .arc{font-size:12.5px;color:var(--ink2);line-height:1.55}
+  .story .arc .q{color:var(--faint);font-style:italic}
+  .story .arc b{font-weight:700}
+  .story .verdictcol{text-align:right}
+  .story .verdictcol .cf{font-size:11px;color:var(--muted);font-weight:600;margin-bottom:5px}
+  .story .verdictcol .cfbar{width:100%;height:6px;border-radius:4px;background:#EDE8E4;overflow:hidden}
+  .story .verdictcol .cffill{height:100%;border-radius:4px}
+  .dbadge{font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--slip);margin-top:6px}
+  .orch-foot{margin-top:16px;padding-top:15px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+  .orch-foot .note{font-size:11px;color:var(--faint);font-weight:600}
+  .link{color:var(--partial);font-size:12.5px;font-weight:700;text-decoration:none;cursor:pointer}.link:hover{text-decoration:underline}
+
+  .context{margin-top:26px;padding:18px 22px;background:#EDE7E1;border-radius:var(--radius);font-size:12.5px;color:var(--muted);line-height:1.65}.context b{color:var(--ink2);font-weight:700}
+
+  /* ===== TRACE DRAWER ===== */
+  .scrim{position:fixed;inset:0;background:rgba(20,16,12,.4);opacity:0;pointer-events:none;transition:.25s;z-index:40}
+  .scrim.open{opacity:1;pointer-events:auto}
+  .drawer{position:fixed;top:0;right:0;bottom:0;width:640px;max-width:94vw;background:#FBFAF9;box-shadow:-12px 0 40px rgba(20,16,12,.18);transform:translateX(100%);transition:.28s cubic-bezier(.4,0,.2,1);z-index:41;display:flex;flex-direction:column}
+  .drawer.open{transform:none}
+  .dhead{padding:20px 24px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;background:#fff}
+  .dhead .t{font-size:15px;font-weight:750}.dhead .s{font-size:11.5px;color:var(--muted);font-family:var(--mono);margin-top:3px}
+  .dclose{border:none;background:#F2EEEA;width:32px;height:32px;border-radius:9px;cursor:pointer;font-size:15px;color:var(--muted)}.dclose:hover{background:#E7E1DB}
+  .dtabs{display:flex;gap:4px;padding:12px 24px 0;background:#fff;border-bottom:1px solid var(--line)}
+  .dtab{border:none;background:transparent;font-family:inherit;font-size:12.5px;font-weight:650;color:var(--muted);padding:9px 12px;cursor:pointer;border-bottom:2px solid transparent}
+  .dtab.on{color:var(--ink);border-bottom-color:var(--pink)}
+  .dbody{flex:1;overflow:auto;padding:22px 24px}
+  .dpanel{display:none}.dpanel.on{display:block}
+  .runmeta{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px}
+  .rm{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+  .rm .k{font-size:10.5px;color:var(--faint);font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+  .rm .v{font-size:14px;font-weight:750;margin-top:3px;font-family:var(--mono)}
+  .tree{font-family:var(--mono);font-size:12px;line-height:1.9}
+  .tn{display:flex;align-items:center;gap:8px;padding:3px 0}
+  .tn .exp{color:var(--faint);width:12px;flex-shrink:0}
+  .tn .nm{font-weight:650;color:var(--ink)}
+  .tn.tool .nm{font-weight:500;color:var(--ink2)}
+  .tn .dur{margin-left:auto;color:var(--faint);font-size:11px}
+  .tn .ret{color:var(--go);font-size:11px}
+  .tn.agent{background:#fff;border:1px solid var(--line);border-radius:8px;padding:7px 10px;margin:4px 0}
+  .tn.par{color:var(--pink);font-weight:700;font-size:11px}
+  .indent{margin-left:18px;border-left:1px dashed var(--line2);padding-left:12px}
+  .payload{background:#141210;color:#D9F2E4;border-radius:10px;padding:14px 16px;font-family:var(--mono);font-size:11.5px;line-height:1.7;margin-top:10px;overflow:auto;white-space:pre}
+  .payload .k{color:#88B8FF}.payload .s{color:#FFC96B}.payload .n{color:#7FE3B0}
+  .recon{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px}
+  .recon .rr{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+  .recon .rr:last-child{border-bottom:none}
+  .recon .rr .nm{width:100px;font-weight:700}
+  .recon .rr .ln{font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:20px}
+  .recon .rule{margin-top:14px;padding:14px;background:var(--partial-bg);border-radius:10px;font-size:12.5px;color:var(--ink2);line-height:1.6}
+  .recon .rule b{color:var(--partial)}
+  .lslink{display:flex;align-items:center;gap:10px;margin-top:18px;padding:14px 16px;background:#fff;border:1px solid var(--line);border-radius:10px;font-size:12.5px;color:var(--muted)}
+  .lslink a{color:var(--partial);font-weight:700;text-decoration:none}.lslink a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail">
+    <div class="brand"><div class="dot">e</div><div><b>elfagent</b><br><span>LAUNCH READINESS</span></div></div>
+    <div class="rail-h">Gate review · this week</div>
+    <a class="launch active"><div class="id">LAUNCH-1001</div><div class="nm">Bright Reset Vitamin-C Serum</div><div class="meta"><span class="chip partial"><span class="d"></span>Partial</span><span>US · DE · UK</span></div></a>
+    <a class="launch"><div class="id">LAUNCH-1002</div><div class="nm">Holy Hydration Refill Cream</div><div class="meta"><span class="chip go"><span class="d"></span>Go</span><span>US</span></div></a>
+    <a class="launch"><div class="id">LAUNCH-1003</div><div class="nm">Glow Reviver Lip Oil</div><div class="meta"><span class="chip slip"><span class="d"></span>Slip</span><span>US · DE · UK</span></div></a>
+    <div class="rail-h" style="margin-top:14px">Upcoming</div>
+    <a class="launch"><div class="id">LAUNCH-1004</div><div class="nm">Power Grip Primer SPF</div><div class="meta"><span class="chip pending"><span class="d"></span>Awaiting gate</span></div></a>
+  </aside>
+
+  <main class="main">
+    <div class="crumb"><b>Launch Readiness</b><span class="sep">/</span><span>Commercialization Stage-Gate</span><span class="stagepill">Gate 4 · Go-to-market readiness</span></div>
+    <div class="viewbar"><button class="on" onclick="show(0,this)">① Live run</button><button onclick="show(1,this)">② Decision</button></div>
+
+    <!-- ===== LIVE RUN with named orchestrator + hub-and-spoke ===== -->
+    <section class="stage on" id="s0">
+      <div class="runhead">
+        <div><div class="sku">LAUNCH-1001 · e.l.f. SKIN · US · DE · UK · triggered at T-4 weeks</div><h1>Bright Reset Vitamin-C Serum</h1></div>
+      </div>
+
+      <div class="conductor busy" id="cond">
+        <div class="cbadge"><div class="ring"></div><b>eO</b></div>
+        <div class="cmeta">
+          <div class="cn">e.l.f.orchestra <span class="role">Orchestrator</span></div>
+          <div class="cnarr" id="narr">Dispatching launch context to 4 specialists…</div>
+        </div>
+        <div class="cstat"><div class="big" id="cbig">running</div><div class="sub" id="csub">0 / 4 returned</div></div>
+      </div>
+
+      <div class="canvas">
+        <div class="spokelabel">Hub-and-spoke — <b>e.l.f.orchestra dispatches to each specialist and collects their findings.</b> The specialists never talk to each other (star topology).</div>
+        <div class="lanes">
+          <div class="lane idle" id="lane0">
+            <div class="spoke"><div class="wire"></div><div class="dispatch"></div><div class="collect"></div></div>
+            <div class="acard">
+              <div class="row1"><span class="aname">Regulatory</span><span class="aq">Is this SKU legally clear to ship in each market?</span><span class="alean slip" style="display:none">Slip DE · Go UK</span><span class="astate idle"><span class="d"></span>queued</span></div>
+              <div class="found"><b>Found:</b> Germany breaches the EU Annex III limit (22% vs 20%) and CPNP is still pending — a hard legal gate. The UK clears on its own SCPN filing.</div>
+            </div>
+          </div>
+          <div class="lane idle" id="lane1">
+            <div class="spoke"><div class="wire"></div><div class="dispatch"></div><div class="collect"></div></div>
+            <div class="acard">
+              <div class="row1"><span class="aname">Supply</span><span class="aq">Can we supply the demand in the open window?</span><span class="alean go" style="display:none">Go</span><span class="astate idle"><span class="d"></span>queued</span></div>
+              <div class="found"><b>Found:</b> Units are positioned in all three markets and the trend window is open now (velocity 87). Every week of delay forfeits measurable velocity — ship.</div>
+            </div>
+          </div>
+          <div class="lane idle" id="lane2">
+            <div class="spoke"><div class="wire"></div><div class="dispatch"></div><div class="collect"></div></div>
+            <div class="acard">
+              <div class="row1"><span class="aname">Retailer</span><span class="aq">Which markets are commercially ready to receive?</span><span class="alean partial" style="display:none">Partial</span><span class="astate idle"><span class="d"></span>queued</span></div>
+              <div class="found"><b>Found:</b> Item setup is complete in all markets and retailer relationships are independent — so launching only the ready markets is coherent, not fragmented.</div>
+            </div>
+          </div>
+          <div class="lane idle" id="lane3">
+            <div class="spoke"><div class="wire"></div><div class="dispatch"></div><div class="collect"></div></div>
+            <div class="acard">
+              <div class="row1"><span class="aname">Packaging</span><span class="aq">Is artwork/labelling ready per market?</span><span class="alean slip" style="display:none">Slip DE</span><span class="astate idle"><span class="d"></span>queued</span></div>
+              <div class="found"><b>Found:</b> German artwork is blocked — the reformulated EU version needs new INCI labelling, the true long pole. US and UK artwork are approved.</div>
+            </div>
+          </div>
+        </div>
+        <div class="runctl">
+          <button class="btn" onclick="playRun()">▷ Replay run</button>
+          <button class="btn primary" id="tojudge" style="display:none" onclick="show(1)">See reconciled decision →</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== DECISION ===== -->
+    <section class="stage" id="s1">
+      <div class="hero">
+        <div class="hero-top">
+          <div>
+            <div class="sku">LAUNCH-1001 · reconciled by e.l.f.orchestra from 4 parallel specialists</div>
+            <h1>Bright Reset Vitamin-C Serum</h1>
+            <div class="verdict"><span class="lbl">Recommendation</span><span class="big">Partial launch</span></div>
+            <p class="because">Ship <b>US and UK</b> now; hold <b>Germany</b> for the reformulated version. Germany carries a hard regulatory gate that outweighs the open trend window — and the two ready markets clear on separate filings, so proceeding there is coherent.</p>
+            <div class="conf"><span>Confidence</span><span class="bar"><span class="fill"></span></span><span>Moderate</span></div>
+          </div>
+          <div class="actions"><button class="btn pink">Approve partial</button><button class="btn">Override…</button><button class="btn ghost">Hold all</button></div>
+        </div>
+      </div>
+
+      <div class="sec-h">The decision, by market</div>
+      <div class="markets">
+        <div class="mkt go"><div class="mkt-top"><span class="flag"><span class="code us">US</span> United States</span><span class="chip go"><span class="d"></span>Go</span></div><ul class="reasons"><li><span class="i ok">✓</span> All specialists clear — inventory, retail setup, artwork and regulatory ready.</li></ul></div>
+        <div class="mkt go"><div class="mkt-top"><span class="flag"><span class="code uk">UK</span> United Kingdom</span><span class="chip go"><span class="d"></span>Go</span></div><ul class="reasons"><li><span class="i ok">✓</span> Clears on a separate UK filing (SCPN); compliant at UK limits; artwork approved.</li></ul></div>
+        <div class="mkt slip"><div class="mkt-top"><span class="flag"><span class="code de">DE</span> Germany</span><span class="chip slip"><span class="d"></span>Slip</span></div><ul class="reasons"><li><span class="i no">✕</span> Ascorbic Acid at 22% exceeds the EU limit of 20% — needs reformulation.</li><li><span class="i warn">!</span> EU notification (CPNP) still in progress.</li><li><span class="i warn">!</span> Artwork blocked pending new EU labelling.</li></ul></div>
+      </div>
+
+      <div class="contested">
+        <div class="ic">⚖</div>
+        <div><h4>Not unanimous on Germany — Supply dissented, and e.l.f.orchestra preserved it</h4>
+        <p><b>Supply</b> recommended shipping Germany now to catch the open trend window. e.l.f.orchestra <b>overrode</b> it — the EU concentration breach and pending notification are legal gates, not schedule preferences — but recorded the dissent rather than discarding it, so the call stays auditable.</p></div>
+      </div>
+
+      <!-- per-agent decision STORIES -->
+      <div class="orch open" id="orch">
+        <div class="orch-head" onclick="document.getElementById('orch').classList.toggle('open')">
+          <div class="l"><div class="flow"><span class="fnode orc"></span><span class="fline"></span><span class="fnode"></span><span class="fnode"></span><span class="fnode"></span><span class="fnode"></span></div>
+          <div><div class="t">What each specialist decided</div><div class="s">e.l.f.orchestra ran 4 in parallel · they split on Germany · reconciled to partial</div></div></div>
+          <span class="caret">▶</span>
+        </div>
+        <div class="orch-body">
+          <div class="stories">
+            <div class="story">
+              <div class="who"><span class="nm">Regulatory</span><span class="lean slip" style="background:var(--slip-bg);color:var(--slip)">Slip DE · Go UK</span></div>
+              <div class="arc"><span class="q">Asked: is it legally clear per market?</span><br>Checked ingredient limits and notification status across US, DE, UK. <b>Found</b> the DE formula exceeds the EU Annex III concentration limit and CPNP isn't complete — while the UK clears on a separate SCPN filing. <b>Called</b> a hard hold on Germany, go on the UK.</div>
+              <div class="verdictcol"><div class="cf">confidence 0.80</div><div class="cfbar"><div class="cffill" style="width:80%;background:var(--slip)"></div></div></div>
+            </div>
+            <div class="story dissent">
+              <div class="who"><span class="nm">Supply</span><span class="lean go" style="background:var(--go-bg);color:var(--go)">Go</span><span class="dbadge">▎dissented</span></div>
+              <div class="arc"><span class="q">Asked: can we supply the open window?</span><br>Checked inventory and the trend signal. <b>Found</b> units positioned in all markets and an open window at velocity 87. <b>Called</b> ship-all-now — waiting forfeits the spike. <b>This lean was overridden</b>, but preserved as recorded dissent.</div>
+              <div class="verdictcol"><div class="cf">confidence 0.85</div><div class="cfbar"><div class="cffill" style="width:85%;background:var(--go)"></div></div></div>
+            </div>
+            <div class="story">
+              <div class="who"><span class="nm">Retailer</span><span class="lean partial" style="background:var(--partial-bg);color:var(--partial)">Partial</span></div>
+              <div class="arc"><span class="q">Asked: which markets can receive?</span><br>Checked item setup and channel readiness. <b>Found</b> all markets set up and relationships independent. <b>Called</b> a partial — launch the ready markets, hold the rest, without fragmenting anything.</div>
+              <div class="verdictcol"><div class="cf">confidence 0.78</div><div class="cfbar"><div class="cffill" style="width:78%;background:var(--partial)"></div></div></div>
+            </div>
+            <div class="story">
+              <div class="who"><span class="nm">Packaging</span><span class="lean slip" style="background:var(--slip-bg);color:var(--slip)">Slip DE</span></div>
+              <div class="arc"><span class="q">Asked: is artwork ready per market?</span><br>Checked artwork and labelling state. <b>Found</b> DE artwork blocked pending new INCI labelling for the reformulated EU version — the real long pole — while US and UK are approved. <b>Called</b> slip on Germany.</div>
+              <div class="verdictcol"><div class="cf">confidence 0.82</div><div class="cfbar"><div class="cffill" style="width:82%;background:var(--slip)"></div></div></div>
+            </div>
+          </div>
+          <div class="orch-foot"><span class="note">e.l.f.orchestra · star topology · typed hand-offs · human decision required · run recorded</span><a class="link" onclick="openTrace()">Open full trace →</a></div>
+        </div>
+      </div>
+
+      <div class="context"><b>Where this sits:</b> the launch decision cockpit for the <b>Commercialization / PMO</b> team at the go-to-market Stage-Gate. e.l.f.orchestra assembles readiness across Regulatory, Supply, Retail and Packaging into one recommendation — but the gate decision stays with the launch owner. Nothing here ships product or writes to a system of record; it recommends, a human decides, the decision is recorded.</div>
+    </section>
+  </main>
+</div>
+
+<!-- ===== TRACE DRAWER ===== -->
+<div class="scrim" id="scrim" onclick="closeTrace()"></div>
+<aside class="drawer" id="drawer">
+  <div class="dhead"><div><div class="t">Execution trace</div><div class="s">run_a7f3c1 · e.l.f.orchestra · LAUNCH-1001</div></div><button class="dclose" onclick="closeTrace()">✕</button></div>
+  <div class="dtabs"><button class="dtab on" onclick="dtab(0,this)">Run tree</button><button class="dtab" onclick="dtab(1,this)">Regulatory payload</button><button class="dtab" onclick="dtab(2,this)">Reconciliation</button></div>
+  <div class="dbody">
+    <!-- run tree -->
+    <div class="dpanel on" id="dp0">
+      <div class="runmeta">
+        <div class="rm"><div class="k">Total duration</div><div class="v">2,847 ms</div></div>
+        <div class="rm"><div class="k">Tokens</div><div class="v">4,102</div></div>
+        <div class="rm"><div class="k">Model</div><div class="v">claude-sonnet</div></div>
+        <div class="rm"><div class="k">Est. cost</div><div class="v">$0.038</div></div>
+      </div>
+      <div class="tree">
+        <div class="tn"><span class="exp">▾</span><span class="nm">e.l.f.orchestra.run</span><span class="dur">2,847ms</span></div>
+        <div class="indent">
+          <div class="tn tool"><span class="exp"> </span><span class="nm">signal.check · countdown=T-4wk</span><span class="ret">→ FIRED</span><span class="dur">12ms</span></div>
+          <div class="tn par"><span class="exp">▾</span><span class="nm">fan_out · 4 specialists · PARALLEL</span><span class="dur">2,203ms</span></div>
+          <div class="indent">
+            <div class="tn agent"><span class="nm">regulatory_agent</span><span class="alean slip" style="font-size:9px">Slip DE</span><span class="dur">1,847ms</span></div>
+            <div class="indent" style="opacity:.8">
+              <div class="tn tool"><span class="nm">get_ingredient_restrictions(DE)</span><span class="ret">→ Annex III · 20%</span><span class="dur">34ms</span></div>
+              <div class="tn tool"><span class="nm">get_ingredient_restrictions(UK)</span><span class="ret">→ 25%</span><span class="dur">28ms</span></div>
+              <div class="tn tool"><span class="nm">get_notification_status(DE)</span><span class="ret">→ in_progress</span><span class="dur">19ms</span></div>
+              <div class="tn tool"><span class="nm">+ 3 more tool calls</span><span class="dur">61ms</span></div>
+              <div class="tn tool"><span class="nm">LLM reasoning</span><span class="ret">1,240 tok</span><span class="dur">1,624ms</span></div>
+            </div>
+            <div class="tn agent"><span class="nm">supply_agent</span><span class="alean go" style="font-size:9px">Go</span><span class="dur">1,203ms</span></div>
+            <div class="tn agent"><span class="nm">retailer_agent</span><span class="alean partial" style="font-size:9px">Partial</span><span class="dur">1,556ms</span></div>
+            <div class="tn agent"><span class="nm">packaging_agent</span><span class="alean slip" style="font-size:9px">Slip DE</span><span class="dur">2,203ms</span></div>
+          </div>
+          <div class="tn"><span class="exp"> </span><span class="nm">judgment.reconcile</span><span class="ret">→ PARTIAL · dissent=[supply]</span><span class="dur">601ms</span></div>
+        </div>
+      </div>
+      <div class="lslink">🔎 The same run in raw tooling: <a>Open run_a7f3c1 in LangSmith →</a></div>
+    </div>
+    <!-- payload -->
+    <div class="dpanel" id="dp1">
+      <p style="font-size:12.5px;color:var(--muted);margin-bottom:12px;line-height:1.6">The typed <b>RegulatoryFinding</b> object the agent returned to e.l.f.orchestra — schema-validated, so it can't hand back malformed data. This is the contract between every agent and the orchestrator.</p>
+      <div class="payload">{
+  <span class="k">"agent"</span>: <span class="s">"regulatory"</span>,
+  <span class="k">"lean"</span>: <span class="s">"slip"</span>,
+  <span class="k">"confidence"</span>: <span class="n">0.80</span>,
+  <span class="k">"hard_gate_markets"</span>: [<span class="s">"DE"</span>],
+  <span class="k">"per_market"</span>: [
+    { <span class="k">"market"</span>:<span class="s">"US"</span>, <span class="k">"ready"</span>:<span class="n">true</span>,  <span class="k">"gate_type"</span>:<span class="n">null</span> },
+    { <span class="k">"market"</span>:<span class="s">"DE"</span>, <span class="k">"ready"</span>:<span class="n">false</span>, <span class="k">"gate_type"</span>:<span class="s">"hard"</span> },
+    { <span class="k">"market"</span>:<span class="s">"UK"</span>, <span class="k">"ready"</span>:<span class="n">true</span>,  <span class="k">"gate_type"</span>:<span class="n">null</span> }
+  ],
+  <span class="k">"evidence"</span>: [
+    <span class="s">"DE: Ascorbic Acid 22% > Annex III limit 20%"</span>,
+    <span class="s">"DE: CPNP notification in_progress"</span>,
+    <span class="s">"UK: SCPN complete; compliant at 25% limit"</span>
+  ],
+  <span class="k">"semantic_version"</span>: <span class="s">"launch_ready@v3"</span>
+}</div>
+    </div>
+    <!-- reconciliation -->
+    <div class="dpanel" id="dp2">
+      <p style="font-size:12.5px;color:var(--muted);margin-bottom:14px;line-height:1.6">How e.l.f.orchestra combined four leans into one recommendation — and why the dissent was kept.</p>
+      <div class="recon">
+        <div class="rr"><span class="nm">Regulatory</span><span class="ln" style="background:var(--slip-bg);color:var(--slip)">Slip DE</span><span style="font-size:11.5px;color:var(--muted)">hard legal gate</span></div>
+        <div class="rr"><span class="nm">Supply</span><span class="ln" style="background:var(--go-bg);color:var(--go)">Go</span><span style="font-size:11.5px;color:var(--muted)">schedule preference</span></div>
+        <div class="rr"><span class="nm">Retailer</span><span class="ln" style="background:var(--partial-bg);color:var(--partial)">Partial</span><span style="font-size:11.5px;color:var(--muted)">markets independent</span></div>
+        <div class="rr"><span class="nm">Packaging</span><span class="ln" style="background:var(--slip-bg);color:var(--slip)">Slip DE</span><span style="font-size:11.5px;color:var(--muted)">artwork long pole</span></div>
+        <div class="rule"><b>Rule applied:</b> a hard legal gate (Regulatory, Packaging on DE) cannot be traded against a schedule/velocity preference (Supply). Markets are independent (Retailer), so ready markets proceed. → <b>PARTIAL: US + UK go, DE slip.</b> Supply's Go is retained as <b>preserved dissent</b> because it was overridden by rule, not by evidence.</div>
+      </div>
+      <div class="lslink">🔎 Full reasoning chain: <a>Open run_a7f3c1 in LangSmith →</a></div>
+    </div>
+  </div>
+</aside>
+
+<script>
+  function show(i,btn){document.querySelectorAll('.stage').forEach((s,idx)=>s.classList.toggle('on',idx===i));document.querySelectorAll('.viewbar button').forEach((b,idx)=>b.classList.toggle('on',idx===i));if(i===0)playRun();}
+  const leans=['Slip DE · Go UK','Go','Partial','Slip DE'];
+  function playRun(){
+    const cond=document.getElementById('cond'),narr=document.getElementById('narr'),csub=document.getElementById('csub'),cbig=document.getElementById('cbig'),toj=document.getElementById('tojudge');
+    cond.classList.add('busy');toj.style.display='none';cbig.textContent='running';csub.textContent='0 / 4 returned';
+    narr.textContent='Dispatching launch context to 4 specialists…';
+    [0,1,2,3].forEach(n=>{const l=document.getElementById('lane'+n);l.className='lane idle';l.querySelector('.astate').className='astate idle';l.querySelector('.astate').innerHTML='<span class="d"></span>queued';l.querySelector('.alean').style.display='none';});
+    // dispatch (spoke animates outward)
+    setTimeout(()=>{[0,1,2,3].forEach(n=>{const l=document.getElementById('lane'+n);l.className='lane dispatching';l.querySelector('.astate').className='astate dispatching';l.querySelector('.astate').innerHTML='<span class="d"></span>dispatched';});},300);
+    // running
+    setTimeout(()=>{[0,1,2,3].forEach(n=>{const l=document.getElementById('lane'+n);l.className='lane running';l.querySelector('.astate').className='astate running';l.querySelector('.astate').innerHTML='<span class="d"></span>reasoning';});narr.textContent='4 specialists reasoning in parallel — none talking to each other…';},1000);
+    // returns staggered
+    let done=0;const times=[1900,2300,2100,2700];
+    [0,1,2,3].forEach(n=>{setTimeout(()=>{const l=document.getElementById('lane'+n);l.className='lane done';l.querySelector('.astate').className='astate done';l.querySelector('.astate').innerHTML='<span class="d"></span>returned';l.querySelector('.alean').style.display='inline-block';done++;csub.textContent=done+' / 4 returned';if(done===2)narr.textContent='Collecting findings… a split is emerging on Germany.';},times[n]);});
+    setTimeout(()=>{cbig.textContent='reconciling';narr.textContent='All 4 returned. They split on Germany — reconciling without collapsing the dissent…';},2750);
+    setTimeout(()=>{cond.classList.remove('busy');cbig.textContent='decided';csub.textContent='PARTIAL';narr.textContent='Recommendation ready: PARTIAL — US + UK go, DE slip. Supply dissent preserved.';document.getElementById('tojudge').style.display='inline-block';},3300);
+  }
+  function openTrace(){document.getElementById('scrim').classList.add('open');document.getElementById('drawer').classList.add('open');}
+  function closeTrace(){document.getElementById('scrim').classList.remove('open');document.getElementById('drawer').classList.remove('open');}
+  function dtab(i,btn){document.querySelectorAll('.dpanel').forEach((p,idx)=>p.classList.toggle('on',idx===i));document.querySelectorAll('.dtab').forEach((b,idx)=>b.classList.toggle('on',idx===i));}
+</script>
+</body>
+</html>

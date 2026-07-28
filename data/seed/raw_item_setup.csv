@@ -1,0 +1,18 @@
+sku_id,retailer,market,channel,status,compliance_dossier_status,note
+SKU-VITC,Target,US,retail,complete,not_required,Item setup complete
+SKU-VITC,Ulta,US,retail,complete,not_required,Item setup complete
+SKU-VITC,DTC,US,dtc,complete,not_required,Owned channel ready
+SKU-VITC,Rossmann,DE,retail,complete,pending,Listing complete but Rossmann will not accept delivery until the EU compliance dossier is accepted
+SKU-VITC,DTC,DE,dtc,complete,pending,Owned EU storefront blocked on the same dossier
+SKU-VITC,Superdrug,UK,retail,complete,accepted,Dossier accepted against the GB filing
+SKU-VITC,DTC,UK,dtc,complete,accepted,Owned GB storefront ready
+SKU-HYDR,Target,US,retail,complete,not_required,Item setup complete
+SKU-HYDR,DTC,US,dtc,complete,not_required,Owned channel ready
+SKU-GLOW,Target,US,retail,in_progress,not_required,Attributes incomplete
+SKU-GLOW,DTC,US,dtc,not_started,not_required,Not started
+SKU-GLOW,Rossmann,DE,retail,not_started,pending,Not started; no dossier submitted
+SKU-GLOW,DTC,DE,dtc,not_started,pending,Not started
+SKU-GLOW,Superdrug,UK,retail,not_started,pending,Not started; no dossier submitted
+SKU-GLOW,DTC,UK,dtc,not_started,pending,Not started
+SKU-LUMI,Target,US,retail,not_started,not_required,Gate not yet reached
+SKU-LUMI,DTC,US,dtc,not_started,not_required,Gate not yet reached

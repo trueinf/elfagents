@@ -1,0 +1,13 @@
+# Local demo profile. DuckDB stands in for Snowflake — see BUILD_SPEC §7.
+# The dbt code here is warehouse-portable; the file is not Snowflake and we
+# never claim it is.
+#
+# Paths are relative to the dbt/ directory, so always invoke from there:
+#   dbt build --profiles-dir .
+elfagent:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: ../data/elfagent.duckdb
+      threads: 4

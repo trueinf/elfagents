@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>elfagent · Launch Readiness</title>
+<style>
+  :root{
+    --bg:#FBFAF9; --panel:#FFFFFF; --ink:#1A1A1A; --muted:#6B6560; --faint:#9B948E;
+    --line:#EDE8E4; --line2:#E2DBD5;
+    --go:#2E7D5B; --go-bg:#EAF5EF; --go-line:#BFE3D2;
+    --slip:#B5701A; --slip-bg:#FBF1E4; --slip-line:#F0D9BE;
+    --hold:#B23A34; --hold-bg:#FBECEA; --hold-line:#F3D2CE;
+    --partial:#3455C8; --partial-bg:#EDF1FC; --partial-line:#CAD8F5;
+    --accent:#E85C7A; /* e.l.f. pink, used sparingly */
+    --ink-soft:#4A4540;
+    --radius:14px; --radius-sm:9px;
+    --shadow:0 1px 2px rgba(20,16,12,.04),0 6px 20px rgba(20,16,12,.05);
+    --shadow-sm:0 1px 2px rgba(20,16,12,.05);
+    --font:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--bg);color:var(--ink);font-family:var(--font);-webkit-font-smoothing:antialiased;font-size:15px;line-height:1.5}
+  .app{display:grid;grid-template-columns:248px 1fr;min-height:100vh}
+
+  /* ---------- LEFT RAIL: shows this lives inside a launch portfolio ---------- */
+  .rail{background:#F5F2EF;border-right:1px solid var(--line);padding:22px 0;position:sticky;top:0;height:100vh;overflow:auto}
+  .brand{display:flex;align-items:center;gap:9px;padding:0 22px 20px}
+  .brand .dot{width:22px;height:22px;border-radius:7px;background:var(--ink);display:grid;place-items:center;color:#fff;font-weight:700;font-size:12px;letter-spacing:-.5px}
+  .brand b{font-weight:650;font-size:15px;letter-spacing:-.2px}
+  .brand span{color:var(--faint);font-size:11px;font-weight:500}
+  .rail-h{padding:14px 22px 8px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);font-weight:600}
+  .launch{display:block;padding:11px 22px;border-left:2px solid transparent;cursor:pointer;text-decoration:none;color:inherit}
+  .launch:hover{background:#EFEAE5}
+  .launch.active{background:#EDE7E1;border-left-color:var(--accent)}
+  .launch .id{font-size:11px;color:var(--faint);font-weight:600;letter-spacing:.02em}
+  .launch .nm{font-size:13.5px;font-weight:550;margin:2px 0 4px;letter-spacing:-.1px}
+  .launch .meta{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--muted)}
+  .chip{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;line-height:1.4}
+  .chip .d{width:6px;height:6px;border-radius:50%}
+  .chip.go{background:var(--go-bg);color:var(--go)} .chip.go .d{background:var(--go)}
+  .chip.slip{background:var(--slip-bg);color:var(--slip)} .chip.slip .d{background:var(--slip)}
+  .chip.partial{background:var(--partial-bg);color:var(--partial)} .chip.partial .d{background:var(--partial)}
+  .chip.pending{background:#F0ECE8;color:var(--muted)} .chip.pending .d{background:var(--faint)}
+
+  /* ---------- MAIN ---------- */
+  .main{padding:26px 34px 60px;max-width:1180px}
+  .crumb{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);margin-bottom:18px}
+  .crumb b{color:var(--ink-soft);font-weight:600}
+  .crumb .sep{color:var(--line2)}
+  .stagepill{margin-left:6px;padding:3px 9px;border-radius:20px;background:#F0ECE8;font-size:11px;font-weight:600;color:var(--muted)}
+
+  /* HERO — the decision is the headline */
+  .hero{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:26px 28px;margin-bottom:20px;position:relative;overflow:hidden}
+  .hero::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--partial)}
+  .hero-top{display:flex;justify-content:space-between;align-items:flex-start;gap:20px}
+  .hero .sku{font-size:12px;color:var(--faint);font-weight:600;letter-spacing:.02em;margin-bottom:5px}
+  .hero h1{font-size:23px;font-weight:650;letter-spacing:-.4px;line-height:1.25}
+  .verdict{display:flex;align-items:center;gap:12px;margin:16px 0 6px}
+  .verdict .lbl{font-size:12px;color:var(--faint);font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+  .verdict .big{font-size:26px;font-weight:700;letter-spacing:-.4px;color:var(--partial)}
+  .because{font-size:15px;color:var(--ink-soft);max-width:660px;line-height:1.55;margin-top:2px}
+  .because b{font-weight:650;color:var(--ink)}
+  .conf{display:flex;align-items:center;gap:9px;margin-top:16px;font-size:12.5px;color:var(--muted)}
+  .conf .bar{width:120px;height:6px;border-radius:4px;background:#EDE8E4;overflow:hidden}
+  .conf .fill{height:100%;width:61%;background:var(--partial);border-radius:4px}
+
+  .actions{display:flex;gap:10px;flex-shrink:0}
+  .btn{border:1px solid var(--line2);background:#fff;color:var(--ink);font-family:inherit;font-size:13.5px;font-weight:600;padding:10px 16px;border-radius:10px;cursor:pointer;transition:.12s}
+  .btn:hover{border-color:var(--faint)}
+  .btn.primary{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .btn.primary:hover{background:#000}
+  .btn.ghost{background:transparent;border-color:transparent;color:var(--muted);padding:10px 12px}
+  .btn.ghost:hover{background:#F2EEEA;color:var(--ink)}
+
+  /* MARKET DECISION STRIP — the object the manager reasons in */
+  .sec-h{font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:var(--faint);font-weight:650;margin:26px 2px 12px}
+  .markets{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .mkt{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:18px 18px 16px;position:relative;overflow:hidden}
+  .mkt::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px}
+  .mkt.go::before{background:var(--go)} .mkt.slip::before{background:var(--slip)}
+  .mkt-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+  .mkt .flag{font-size:15px;font-weight:650;letter-spacing:-.1px;display:flex;align-items:center;gap:8px}
+  .mkt .flag .code{width:26px;height:19px;border-radius:4px;display:grid;place-items:center;font-size:10px;font-weight:700;color:#fff;letter-spacing:.02em}
+  .code.us{background:#3455C8}.code.de{background:#3A3A3A}.code.uk{background:#8A2B3A}
+  .mkt .reasons{list-style:none;display:flex;flex-direction:column;gap:8px;margin-top:4px}
+  .mkt .reasons li{font-size:12.5px;color:var(--muted);display:flex;gap:8px;line-height:1.45}
+  .mkt .reasons li .i{flex-shrink:0;width:15px;height:15px;border-radius:50%;display:grid;place-items:center;font-size:9px;font-weight:700;margin-top:1px}
+  .i.ok{background:var(--go-bg);color:var(--go)} .i.no{background:var(--hold-bg);color:var(--hold)} .i.warn{background:var(--slip-bg);color:var(--slip)}
+  .mkt.go .reasons li:only-child{color:var(--go)}
+
+  /* CONTESTED CALL — surfaced disagreement, only where it matters */
+  .contested{background:linear-gradient(0deg,#FCF6EE,#FDFAF5);border:1px solid var(--slip-line);border-radius:var(--radius);padding:18px 20px;margin-top:16px;display:flex;gap:14px;align-items:flex-start}
+  .contested .ic{flex-shrink:0;width:30px;height:30px;border-radius:9px;background:var(--slip-bg);color:var(--slip);display:grid;place-items:center;font-size:15px;font-weight:700}
+  .contested h4{font-size:13.5px;font-weight:650;margin-bottom:4px}
+  .contested p{font-size:13px;color:var(--ink-soft);line-height:1.55}
+  .contested b{font-weight:650}
+
+  /* ORCHESTRATION STRIP — principle 1: always-visible "how this was decided" */
+  .orch{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow-sm);margin-top:24px;overflow:hidden}
+  .orch-head{padding:16px 20px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none}
+  .orch-head:hover{background:#FBF9F7}
+  .orch-head .l{display:flex;align-items:center;gap:11px}
+  .orch-head .t{font-size:13.5px;font-weight:650}
+  .orch-head .s{font-size:12px;color:var(--muted)}
+  .flow{display:flex;align-items:center;gap:6px}
+  .node{width:9px;height:9px;border-radius:50%;background:var(--go)}
+  .node.orc{width:11px;height:11px;background:var(--ink)}
+  .flowline{width:14px;height:1.5px;background:var(--line2)}
+  .caret{color:var(--faint);font-size:13px;transition:.2s;margin-left:4px}
+  .orch.open .caret{transform:rotate(90deg)}
+  .orch-body{display:none;border-top:1px solid var(--line);padding:20px}
+  .orch.open .orch-body{display:block}
+  .orch-lead{font-size:12.5px;color:var(--muted);margin-bottom:16px;line-height:1.55;max-width:720px}
+  .orch-lead b{color:var(--ink-soft);font-weight:600}
+  .agents{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .agent{border:1px solid var(--line);border-radius:var(--radius-sm);padding:14px;background:#FCFBFA}
+  .agent-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}
+  .agent .an{font-size:13px;font-weight:650}
+  .agent .status{font-size:10.5px;color:var(--go);display:flex;align-items:center;gap:4px;font-weight:600}
+  .agent .status .d{width:5px;height:5px;border-radius:50%;background:var(--go)}
+  .agent .lean{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700;margin-bottom:9px}
+  .lean.go{background:var(--go-bg);color:var(--go)} .lean.slip{background:var(--slip-bg);color:var(--slip)} .lean.partial{background:var(--partial-bg);color:var(--partial)}
+  .agent p{font-size:11.5px;color:var(--muted);line-height:1.5}
+  .agent .tools{margin-top:10px;font-size:10.5px;color:var(--faint);cursor:pointer;display:flex;align-items:center;gap:5px}
+  .agent .tools:hover{color:var(--muted)}
+  .orch-foot{margin-top:16px;padding-top:14px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+  .orch-foot .note{font-size:11.5px;color:var(--faint)}
+  .link{color:var(--partial);font-size:12.5px;font-weight:600;text-decoration:none;cursor:pointer}
+  .link:hover{text-decoration:underline}
+
+  /* footer context — principle 2: where this sits */
+  .context{margin-top:26px;padding:16px 20px;background:#F5F2EF;border-radius:var(--radius);font-size:12.5px;color:var(--muted);line-height:1.6}
+  .context b{color:var(--ink-soft);font-weight:600}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- LEFT RAIL: this launch is one of several in the Stage-Gate pipeline -->
+  <aside class="rail">
+    <div class="brand"><div class="dot">e</div><div><b>elfagent</b><br><span>Launch Readiness</span></div></div>
+
+    <div class="rail-h">Gate review · this week</div>
+    <a class="launch active">
+      <div class="id">LAUNCH-1001</div>
+      <div class="nm">Bright Reset Vitamin-C Serum</div>
+      <div class="meta"><span class="chip partial"><span class="d"></span>Partial</span> <span>US · DE · UK</span></div>
+    </a>
+    <a class="launch">
+      <div class="id">LAUNCH-1002</div>
+      <div class="nm">Holy Hydration Refill Cream</div>
+      <div class="meta"><span class="chip go"><span class="d"></span>Go</span> <span>US</span></div>
+    </a>
+    <a class="launch">
+      <div class="id">LAUNCH-1003</div>
+      <div class="nm">Glow Reviver Lip Oil</div>
+      <div class="meta"><span class="chip slip"><span class="d"></span>Slip</span> <span>US · DE · UK</span></div>
+    </a>
+
+    <div class="rail-h" style="margin-top:16px">Upcoming</div>
+    <a class="launch">
+      <div class="id">LAUNCH-1004</div>
+      <div class="nm">Power Grip Primer SPF</div>
+      <div class="meta"><span class="chip pending"><span class="d"></span>Awaiting gate</span></div>
+    </a>
+    <a class="launch">
+      <div class="id">LAUNCH-1005</div>
+      <div class="nm">Naturium Phyto-Glow Set</div>
+      <div class="meta"><span class="chip pending"><span class="d"></span>Awaiting gate</span></div>
+    </a>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+    <div class="crumb">
+      <b>Launch Readiness</b><span class="sep">/</span>
+      <span>Commercialization Stage-Gate</span>
+      <span class="stagepill">Gate 4 · Go-to-market readiness</span>
+    </div>
+
+    <!-- HERO: the decision leads -->
+    <section class="hero">
+      <div class="hero-top">
+        <div>
+          <div class="sku">LAUNCH-1001 · e.l.f. SKIN · T-minus 4 weeks to first ship</div>
+          <h1>Bright Reset Vitamin-C Serum</h1>
+          <div class="verdict">
+            <span class="lbl">Recommendation</span>
+            <span class="big">Partial launch</span>
+          </div>
+          <p class="because">Ship <b>US and UK</b> now; hold <b>Germany</b> for the reformulated version. The German launch carries a hard regulatory gate that outweighs the open trend window — and the two ready markets clear on separate filings, so proceeding there is coherent.</p>
+          <div class="conf"><span>Confidence</span><span class="bar"><span class="fill"></span></span><span>Moderate</span></div>
+        </div>
+        <div class="actions">
+          <button class="btn primary">Approve partial</button>
+          <button class="btn">Override…</button>
+          <button class="btn ghost">Hold all</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- MARKET STRIP: the object the manager reasons in -->
+    <div class="sec-h">The decision, by market</div>
+    <div class="markets">
+      <div class="mkt go">
+        <div class="mkt-top">
+          <span class="flag"><span class="code us">US</span> United States</span>
+          <span class="chip go"><span class="d"></span>Go</span>
+        </div>
+        <ul class="reasons"><li><span class="i ok">✓</span> All specialists clear — inventory, retail setup, artwork and regulatory all ready.</li></ul>
+      </div>
+      <div class="mkt go">
+        <div class="mkt-top">
+          <span class="flag"><span class="code uk">UK</span> United Kingdom</span>
+          <span class="chip go"><span class="d"></span>Go</span>
+        </div>
+        <ul class="reasons"><li><span class="i ok">✓</span> Clears on a separate UK filing (SCPN); formula compliant at UK limits; artwork approved.</li></ul>
+      </div>
+      <div class="mkt slip">
+        <div class="mkt-top">
+          <span class="flag"><span class="code de">DE</span> Germany</span>
+          <span class="chip slip"><span class="d"></span>Slip</span>
+        </div>
+        <ul class="reasons">
+          <li><span class="i no">✕</span> Ascorbic Acid at 22% exceeds the EU limit of 20% — needs reformulation.</li>
+          <li><span class="i warn">!</span> EU notification (CPNP) still in progress.</li>
+          <li><span class="i warn">!</span> Artwork blocked pending new EU labelling.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- CONTESTED CALL: surfaced disagreement, only where it exists -->
+    <div class="contested">
+      <div class="ic">⚖</div>
+      <div>
+        <h4>Not unanimous on Germany — one specialist disagreed</h4>
+        <p><b>Supply</b> recommended shipping Germany now to catch the open trend window. This was <b>overridden</b>: the EU concentration breach and pending notification are legal gates, not schedule preferences — they can't be traded against velocity. The dissent is preserved here so the call is auditable.</p>
+      </div>
+    </div>
+
+    <!-- ORCHESTRATION STRIP: principle 1 — collapsed by default, one click to reveal -->
+    <div class="orch" id="orch">
+      <div class="orch-head" onclick="document.getElementById('orch').classList.toggle('open')">
+        <div class="l">
+          <div class="flow">
+            <span class="node orc"></span><span class="flowline"></span>
+            <span class="node"></span><span class="node"></span><span class="node"></span><span class="node"></span>
+          </div>
+          <div>
+            <div class="t">How this was decided</div>
+            <div class="s">4 specialist agents ran in parallel · they split on Germany · reconciled to partial</div>
+          </div>
+        </div>
+        <span class="caret">▶</span>
+      </div>
+      <div class="orch-body">
+        <p class="orch-lead">An orchestrator ran four independent specialists <b>in parallel</b> — each reasoning only over its own domain, none talking to each other. Three markets were unanimous; they split on Germany, and the orchestrator reconciled the conflict without collapsing it. This is the evidence behind the recommendation above.</p>
+        <div class="agents">
+          <div class="agent">
+            <div class="agent-top"><span class="an">Regulatory</span><span class="status"><span class="d"></span>returned</span></div>
+            <span class="lean slip">Slip DE / Go UK</span>
+            <p>DE breaches the EU concentration limit and notification is pending; UK clears on its own filing.</p>
+            <div class="tools">▸ 6 tool calls</div>
+          </div>
+          <div class="agent">
+            <div class="agent-top"><span class="an">Supply</span><span class="status"><span class="d"></span>returned</span></div>
+            <span class="lean go">Go</span>
+            <p>Units positioned in all three markets; the trend window is open now — every week of delay forfeits velocity.</p>
+            <div class="tools">▸ 4 tool calls</div>
+          </div>
+          <div class="agent">
+            <div class="agent-top"><span class="an">Retailer</span><span class="status"><span class="d"></span>returned</span></div>
+            <span class="lean partial">Partial</span>
+            <p>Channels ready in all markets and relationships are independent, so a partial launch of the ready markets is coherent.</p>
+            <div class="tools">▸ 6 tool calls</div>
+          </div>
+          <div class="agent">
+            <div class="agent-top"><span class="an">Packaging</span><span class="status"><span class="d"></span>returned</span></div>
+            <span class="lean slip">Slip DE</span>
+            <p>DE artwork is the long pole — new INCI labelling required for the reformulated EU version. US and UK approved.</p>
+            <div class="tools">▸ 6 tool calls</div>
+          </div>
+        </div>
+        <div class="orch-foot">
+          <span class="note">Star topology · typed hand-offs · human decision required · run recorded</span>
+          <a class="link">Open full trace →</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONTEXT: principle 2 — where this sits -->
+    <div class="context">
+      <b>Where this sits:</b> this is the launch decision cockpit for the <b>Commercialization / PMO</b> team, surfacing each launch as it reaches its go-to-market Stage-Gate. It assembles readiness across Regulatory, Supply, Retail and Packaging into one recommendation — but the gate decision stays with the launch owner. Nothing here ships product or writes to a system of record; it recommends, a human decides, and the decision is recorded against the launch.
+    </div>
+  </main>
+</div>
+</body>
+</html>

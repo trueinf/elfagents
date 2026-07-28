@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/api.ts","./src/main.tsx","./src/userun.ts","./src/vite-env.d.ts","./src/components/marketgrid.tsx","./src/views/anatomy.tsx","./src/views/decision.tsx","./src/views/liverun.tsx","./src/views/tracedrawer.tsx"],"version":"5.6.3"}

@@ -1,0 +1,102 @@
+version: 2
+
+models:
+  # ===========================================================================
+  # THE GOVERNED DEFINITION
+  # ===========================================================================
+  - name: launch_market_readiness
+    description: >
+      **Governed definition of `launch_ready`.** One row per launch per target
+      market.
+
+      OWNER: Director of Commercialization (Stage-Gate / PMO). This role owns
+      the go/slip/partial decision, so it owns the definition of "ready" that
+      the decision is argued against.
+
+      RATIONALE: before this definition existed, "ready" meant something
+      different in each function — Supply read it as units positioned,
+      Regulatory as filings clear, Commercial as item setup done. Four
+      functions each reporting "ready" about the same launch and meaning four
+      different things is how a launch slips without anyone being wrong. The
+      metric fixes one definition so disagreement between specialists is about
+      judgment, not vocabulary.
+
+      DEFINITION: a market is ready when the formula is ingredient-compliant
+      for that market AND pre-market notification is complete or not required
+      AND every selling channel has item setup complete AND packaging artwork
+      is approved.
+
+      SCOPE, DELIBERATELY NARROW: `retailer_dossier_clear` and
+      `unmet_labelling_requirements` are published here as evidence but are NOT
+      part of `launch_ready`. Specialists reason over more than the metric
+      encodes. When a specialist calls a market unready for a reason outside
+      the definition, the reconciliation must say so rather than quietly
+      widening the metric.
+
+      NULL HANDLING: fail-closed on notification, item setup and artwork — an
+      absent row means unproven, not fine. Fail-open on ingredients only, where
+      no restriction row genuinely means no restriction is on record.
+
+      VERSION: stamped from `var('launch_ready_version')` onto every row and
+      carried to `Finding.semantic_version` on every agent contract, so a run
+      can always be tied to the definition that produced it.
+    config:
+      meta:
+        owner: Director of Commercialization
+        governed: true
+        version_var: launch_ready_version
+    columns:
+      - name: launch_id
+        tests: [not_null]
+      - name: market
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["US", "DE", "UK"]
+      - name: launch_ready
+        description: The governed metric. All four gates must hold.
+        tests: [not_null]
+      - name: ingredient_compliant
+        description: Gate 1. No prohibited substance and no exceeded concentration limit.
+        tests: [not_null]
+      - name: notification_clear
+        description: Gate 2. Pre-market notification complete or not required.
+        tests: [not_null]
+      - name: item_setup_complete
+        description: Gate 3. Every selling channel in the market is set up.
+        tests: [not_null]
+      - name: artwork_approved
+        description: Gate 4. Packaging artwork approved for the market.
+        tests: [not_null]
+      - name: retailer_dossier_clear
+        description: >
+          Evidence, not part of the metric. Whether every account in the market
+          has accepted our compliance dossier — a retailer receiving condition.
+        tests: [not_null]
+      - name: semantic_version
+        tests: [not_null]
+    tests:
+      - unique:
+          arguments:
+            column_name: "launch_id || '-' || market"
+
+  - name: launches
+    description: >
+      One row per launch — the queue the deterministic countdown detector reads.
+      `at_gate_threshold` is what fires the flow. No LLM decides that a launch
+      is due for review (BUILD_SPEC §5.5).
+    columns:
+      - name: launch_id
+        tests: [unique, not_null]
+      - name: readiness_shape
+        description: >
+          all_ready / mixed / none_ready — the shape of the problem before any
+          agent has reasoned about it. Not a recommendation.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["all_ready", "mixed", "none_ready"]
+      - name: at_gate_threshold
+        tests: [not_null]

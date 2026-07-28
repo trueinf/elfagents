@@ -1,0 +1,11 @@
+sku_id,market,requirement,status,note
+SKU-VITC,US,MoCRA ingredient declaration,met,Current US panel is compliant
+SKU-VITC,DE,EU INCI panel for the reformulated variant,pending,New INCI list required once the concentration is reformulated
+SKU-VITC,DE,EU Responsible Person address on pack,pending,Awaiting RP appointment confirmation
+SKU-VITC,UK,GB INCI panel,met,Compliant at GB limits
+SKU-VITC,UK,UK Responsible Person address on pack,met,GB RP named on current artwork
+SKU-HYDR,US,MoCRA ingredient declaration,met,Compliant
+SKU-GLOW,US,MoCRA ingredient declaration,met,Compliant
+SKU-GLOW,DE,EU INCI panel,blocked,Cannot be met while a prohibited substance is present
+SKU-GLOW,UK,GB INCI panel,blocked,Cannot be met while a prohibited substance is present
+SKU-LUMI,US,MoCRA ingredient declaration,pending,Panel not yet drafted

@@ -1,0 +1,22 @@
+.venv/
+__pycache__/
+*.py[cod]
+
+# Warehouse is rebuilt from seed CSVs by `dbt build` — the CSVs are the source
+# of truth, the .duckdb file is a build artefact.
+data/*.duckdb
+data/*.duckdb.wal
+
+# Run checkpoints. Durable within a session (that's the point), disposable
+# across them.
+data/*.sqlite
+
+dbt/target/
+dbt/logs/
+dbt/dbt_packages/
+
+node_modules/
+web/dist/
+
+.env
+.env.local

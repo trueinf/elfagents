@@ -1,0 +1,33 @@
+name: elfagent
+version: "1.0.0"
+config-version: 2
+profile: elfagent
+
+model-paths: ["models"]
+seed-paths: ["../data/seed"]
+
+# The governed-definition version stamped onto every readiness row and carried
+# through to Finding.semantic_version on every agent contract. Bump this when
+# the launch_ready definition changes so a run can be tied to the definition
+# that produced it.
+vars:
+  launch_ready_version: "launch_ready@v3"
+
+models:
+  elfagent:
+    staging:
+      +materialized: view
+    marts:
+      +materialized: table
+
+seeds:
+  elfagent:
+    raw_ingredients:
+      +column_types:
+        max_limit_pct: DOUBLE
+    raw_sku_ingredients:
+      +column_types:
+        concentration_pct: DOUBLE
+    raw_launches:
+      +column_types:
+        first_ship_date: DATE

@@ -1,0 +1,9 @@
+sku_id,market,portal,status,note
+SKU-VITC,US,none,not_required,MoCRA product listing only; no pre-market notification gate (demo)
+SKU-VITC,DE,CPNP,in_progress,CPSR complete; portal submission pending
+SKU-VITC,UK,SCPN,complete,GB filing complete on the separate SCPN portal
+SKU-HYDR,US,none,not_required,US-only launch
+SKU-GLOW,US,none,not_required,MoCRA product listing only (demo)
+SKU-GLOW,DE,CPNP,not_started,Blocked upstream by a prohibited substance
+SKU-GLOW,UK,SCPN,not_started,Blocked upstream by a prohibited substance
+SKU-LUMI,US,none,not_required,US-only launch

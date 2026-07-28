@@ -1,0 +1,9 @@
+sku_id,market,status,note
+SKU-VITC,US,approved,Final artwork approved
+SKU-VITC,DE,blocked,Requires new INCI labelling for the reformulated EU version
+SKU-VITC,UK,approved,GB artwork approved
+SKU-HYDR,US,approved,Approved
+SKU-GLOW,US,approved,Approved
+SKU-GLOW,DE,not_started,Not started
+SKU-GLOW,UK,not_started,Not started
+SKU-LUMI,US,in_progress,Concepts in review

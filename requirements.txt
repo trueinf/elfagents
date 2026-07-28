@@ -1,0 +1,25 @@
+# Data layer (BUILD_SPEC step 1)
+dbt-duckdb>=1.9
+duckdb>=1.0
+
+# Platform shell (BUILD_SPEC step 2)
+langgraph>=1.0
+langgraph-checkpoint-sqlite>=3.0   # durable checkpointing — a file, not memory
+langsmith>=0.1
+pydantic>=2.7
+
+# Config. Loaded explicitly at entry points, never on import — the test suite
+# must stay hermetic and must not pick up whatever is in a local .env.
+python-dotenv>=1.0
+
+# Tests
+pytest>=8
+pytest-asyncio>=1.0
+
+# Agents (BUILD_SPEC step 3+)
+anthropic>=0.116
+
+# API layer (step 6)
+# fastapi>=0.115
+# uvicorn[standard]>=0.30
+# sse-starlette>=2.1

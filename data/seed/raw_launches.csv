@@ -1,0 +1,5 @@
+launch_id,sku_id,target_markets,first_ship_date,countdown_weeks,scenario
+LAUNCH-1001,SKU-VITC,US;DE;UK,2026-09-14,4,partial
+LAUNCH-1002,SKU-HYDR,US,2026-09-07,4,clean_go
+LAUNCH-1003,SKU-GLOW,US;DE;UK,2026-09-21,4,clear_slip
+LAUNCH-1004,SKU-LUMI,US,2026-11-02,11,awaiting_gate

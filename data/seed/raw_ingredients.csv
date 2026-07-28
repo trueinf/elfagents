@@ -1,0 +1,10 @@
+ingredient_id,inci_name,market,annex_status,max_limit_pct,note
+ING-ASC-US,Ascorbic Acid,US,none,,No US federal concentration restriction on record (demo)
+ING-ASC-DE,Ascorbic Acid,DE,annex_iii_restricted,20.0,Illustrative EU Annex III conditional limit (demo)
+ING-ASC-UK,Ascorbic Acid,UK,annex_iii_restricted,25.0,Illustrative GB limit; diverges from the EU figure (demo)
+ING-NIA-US,Niacinamide,US,none,,No restriction on record (demo)
+ING-NIA-DE,Niacinamide,DE,none,,No restriction on record (demo)
+ING-NIA-UK,Niacinamide,UK,none,,No restriction on record (demo)
+ING-TRC-US,Triclocarban,US,none,,No federal cosmetic prohibition on record (demo)
+ING-TRC-DE,Triclocarban,DE,annex_ii_prohibited,0.0,EU Annex II prohibition; banned at any concentration (demo)
+ING-TRC-UK,Triclocarban,UK,annex_ii_prohibited,0.0,GB retained the equivalent prohibition (demo)

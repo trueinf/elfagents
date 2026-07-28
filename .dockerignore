@@ -1,0 +1,15 @@
+.venv/
+node_modules/
+web/
+design/
+tests/
+scripts/
+.git/
+.env
+data/*.duckdb
+data/*.sqlite
+dbt/target/
+dbt/logs/
+__pycache__/
+**/__pycache__/
+*.pyc

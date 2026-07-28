@@ -1,0 +1,49 @@
+# Render blueprint for the elfagent API.
+#
+# Render (or Railway, or Fly) rather than a serverless platform because the run
+# endpoint streams for 60-120s. Netlify hosts the front end; see netlify.toml.
+
+services:
+  - type: web
+    name: elfagent-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    healthCheckPath: /api/health
+
+    # Paused runs live here. Without a disk the filesystem is ephemeral and a
+    # redeploy loses any run waiting at the human gate — which also means the
+    # kill-and-resume demo cannot be shown across a deploy.
+    disk:
+      name: elfagent-data
+      mountPath: /app/data
+      sizeGB: 1
+
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false          # set in the dashboard; never in this file
+      - key: LANGSMITH_API_KEY
+        sync: false
+      - key: ELFAGENT_ACCESS_KEY
+        sync: false          # the shared key the UI asks for
+      - key: ELFAGENT_ALLOWED_ORIGINS
+        sync: false          # e.g. https://elfagents.netlify.app
+
+      - key: LANGSMITH_TRACING
+        value: "true"
+      - key: LANGSMITH_PROJECT
+        value: elfagent-launch-readiness
+      - key: ELFAGENT_MODEL
+        value: claude-opus-5
+      - key: ELFAGENT_EFFORT
+        value: high
+
+      # Per-run ceiling — stops one runaway loop.
+      - key: ELFAGENT_MAX_USD_PER_RUN
+        value: "1.00"
+      # Deployment ceiling — stops volume. A public URL is a button that
+      # spends credit; this is what bounds the bill.
+      - key: ELFAGENT_MAX_USD_TOTAL
+        value: "25.00"
+      - key: ELFAGENT_MAX_CONCURRENT_RUNS
+        value: "3"

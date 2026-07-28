@@ -60,10 +60,13 @@ def _finding(lean: str, **extra) -> dict:
     }
 
 
-def _client() -> RoutedScriptedClient:
-    """One lookup turn then one submission per specialist, plus judgment."""
-    return RoutedScriptedClient(
-        {
+def _client(runs: int = 1) -> RoutedScriptedClient:
+    """One lookup turn then one submission per specialist, plus judgment.
+
+    `runs` multiplies the script so a test can stream the same launch more than
+    once — the routed client keeps one queue per agent, not one per run.
+    """
+    scripts = {
             "submit_regulatory_finding": [
                 _reply(*[_call("get_notification_status", market=m) for m in MARKETS]),
                 _reply(
@@ -116,12 +119,14 @@ def _client() -> RoutedScriptedClient:
                 )
             ],
         }
+    return RoutedScriptedClient(
+        {route: replies * runs for route, replies in scripts.items()}
     )
 
 
 @pytest.fixture
 async def api(tmp_path):
-    app = create_app(_client(), checkpoints=str(tmp_path / "cp.sqlite"))
+    app = create_app(_client(runs=3), checkpoints=str(tmp_path / "cp.sqlite"))
     async with app.router.lifespan_context(app):
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
@@ -138,6 +143,12 @@ async def _drain_stream(http, launch: str = LAUNCH) -> list[dict]:
             if line.startswith("data:"):
                 events.append(json.loads(line[5:].strip()))
     return events
+
+
+def _thread_of(events: list[dict]) -> str:
+    """Each run owns a thread; the id arrives on the first event."""
+    started = next(e for e in events if e["type"] == "run_started")
+    return started["payload"]["thread_id"]
 
 
 # ------------------------------------------------------------------ queue
@@ -224,7 +235,8 @@ async def test_tool_calls_are_labelled_as_tools_on_the_wire(api):
 
 async def test_the_trace_drawer_reads_the_same_events_the_live_view_did(api):
     streamed = await _drain_stream(api)
-    captured = (await api.get(f"/api/runs/{LAUNCH}/trace")).json()
+    thread = _thread_of(streamed)
+    captured = (await api.get(f"/api/runs/thread/{thread}/trace")).json()
 
     assert [e["seq"] for e in captured] == [e["seq"] for e in streamed]
     assert [e["type"] for e in captured] == [e["type"] for e in streamed]
@@ -232,9 +244,11 @@ async def test_the_trace_drawer_reads_the_same_events_the_live_view_did(api):
 
 async def test_the_trace_stays_one_ordered_sequence_across_the_pause(api):
     """The decision must not restart numbering and sort ahead of the run."""
-    await _drain_stream(api)
-    await api.post(f"/api/runs/{LAUNCH}/decision", json={"decided_action": "partial"})
-    captured = (await api.get(f"/api/runs/{LAUNCH}/trace")).json()
+    thread = _thread_of(await _drain_stream(api))
+    await api.post(
+        f"/api/runs/thread/{thread}/decision", json={"decided_action": "partial"}
+    )
+    captured = (await api.get(f"/api/runs/thread/{thread}/trace")).json()
 
     sequence = [e["seq"] for e in captured]
     assert sequence == sorted(sequence), "the trace is not monotonically ordered"
@@ -243,22 +257,40 @@ async def test_the_trace_stays_one_ordered_sequence_across_the_pause(api):
 
 
 async def test_state_reports_the_run_paused_at_the_gate(api):
-    await _drain_stream(api)
-    state = (await api.get(f"/api/runs/{LAUNCH}")).json()
+    thread = _thread_of(await _drain_stream(api))
+    state = (await api.get(f"/api/runs/thread/{thread}")).json()
 
     assert state["awaiting_human"] is True
     assert len(state["values"]["findings"]) == 4
     assert state["values"].get("decision") is None
+    assert state["launch_id"] == LAUNCH
+
+
+async def test_two_runs_of_one_launch_do_not_share_a_thread(api):
+    """Two viewers opening the same launch must not overwrite each other.
+
+    Deriving the thread from the launch id alone is invisible with one user
+    and immediate with two — one person's decision would resume the other's
+    run.
+    """
+    first = _thread_of(await _drain_stream(api))
+    second = _thread_of(await _drain_stream(api))
+
+    assert first != second
+    for thread in (first, second):
+        state = (await api.get(f"/api/runs/thread/{thread}")).json()
+        assert state["awaiting_human"] is True
+        assert len(state["values"]["findings"]) == 4
 
 
 # ------------------------------------------------------------ human gate
 
 
 async def test_the_decision_endpoint_records_and_resumes(api):
-    await _drain_stream(api)
+    thread = _thread_of(await _drain_stream(api))
 
     response = await api.post(
-        f"/api/runs/{LAUNCH}/decision",
+        f"/api/runs/thread/{thread}/decision",
         json={"decided_action": "partial", "note": "Ship US+UK."},
     )
     assert response.status_code == 200
@@ -267,14 +299,15 @@ async def test_the_decision_endpoint_records_and_resumes(api):
     assert body["decision"]["decided_action"] == "partial"
     assert body["decision"]["decided_by"] == "Director of Commercialization"
     assert body["decision"]["followed_recommendation"] is True
+    assert body["decision"]["subject_id"] == LAUNCH
     assert body["state"]["awaiting_human"] is False
 
 
 async def test_an_overruling_decision_is_recorded_as_such(api):
-    await _drain_stream(api)
+    thread = _thread_of(await _drain_stream(api))
     body = (
         await api.post(
-            f"/api/runs/{LAUNCH}/decision",
+            f"/api/runs/thread/{thread}/decision",
             json={"decided_action": "slip", "note": "Not worth the split."},
         )
     ).json()
@@ -284,12 +317,41 @@ async def test_an_overruling_decision_is_recorded_as_such(api):
 
 
 async def test_deciding_twice_is_rejected(api):
-    await _drain_stream(api)
-    await api.post(f"/api/runs/{LAUNCH}/decision", json={"decided_action": "partial"})
+    thread = _thread_of(await _drain_stream(api))
+    await api.post(
+        f"/api/runs/thread/{thread}/decision", json={"decided_action": "partial"}
+    )
     again = await api.post(
-        f"/api/runs/{LAUNCH}/decision", json={"decided_action": "go"}
+        f"/api/runs/thread/{thread}/decision", json={"decided_action": "go"}
     )
     assert again.status_code == 409
+
+
+# ------------------------------------------------------------------- access
+
+
+async def test_endpoints_are_closed_when_an_access_key_is_set(api, monkeypatch):
+    """A public URL is a button that spends model credit."""
+    monkeypatch.setenv("ELFAGENT_ACCESS_KEY", "shared-secret")
+
+    assert (await api.get("/api/launches")).status_code == 401
+    assert (await api.get(f"/api/runs/{LAUNCH}/stream")).status_code == 401
+    # Health stays open — hosting platforms probe it.
+    assert (await api.get("/api/health")).status_code == 200
+
+    assert (await api.post("/api/auth", json={"key": "wrong"})).status_code == 401
+    assert (await api.post("/api/auth", json={"key": "shared-secret"})).status_code == 200
+    assert (await api.get("/api/launches")).status_code == 200
+
+
+async def test_the_deployment_spend_ceiling_refuses_new_runs(api):
+    """The per-run cap bounds one run; this bounds the deployment."""
+    budget = api._transport.app.state.budget  # type: ignore[attr-defined]
+    budget.spent = budget.max_usd
+
+    response = await api.get(f"/api/runs/{LAUNCH}/stream")
+    assert response.status_code == 429
+    assert "spend ceiling" in response.text
 
 
 # ------------------------------------------------------------------ misc

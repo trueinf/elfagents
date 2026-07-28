@@ -41,6 +41,9 @@ export interface RunView {
   decision?: Record<string, any>;
   events: OrchestrationEvent[];
   error?: string;
+  /** The graph thread this run owns. One per run, not one per launch — two
+   *  viewers opening the same launch get independent runs. */
+  thread?: string;
 }
 
 const EMPTY: RunView = {
@@ -73,6 +76,10 @@ export function useRun() {
           const find = (name: string) => agents.findIndex((a) => a.name === name);
 
           switch (event.type) {
+            case "run_started": {
+              next.thread = event.payload.thread_id ?? event.run_id;
+              return next;
+            }
             case "fan_out": {
               const names: string[] = event.payload.agents ?? [];
               next.agents = names.map((name) => ({

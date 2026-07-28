@@ -3,6 +3,8 @@ import {
   type Anatomy as AnatomyData,
   type Launch,
   type Lean,
+  Unauthorised,
+  authenticate,
   getAnatomy,
   getLaunches,
   submitDecision,
@@ -22,7 +24,91 @@ const SHAPE_CHIP: Record<string, string> = {
   none_ready: "slip",
 };
 
+/**
+ * Access gate.
+ *
+ * Not security theatre and not real auth either — a single shared key so a
+ * public URL is not an open button that spends model credit. It exists because
+ * every run costs money, which is a different concern from protecting data.
+ */
+function Gate({ onUnlock }: { onUnlock: () => void }) {
+  const [key, setKey] = useState("");
+  const [error, setError] = useState<string | undefined>();
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setError(undefined);
+    try {
+      await authenticate(key);
+      onUnlock();
+    } catch (e) {
+      setError(
+        e instanceof Unauthorised
+          ? "That key was not accepted."
+          : `Could not reach the API: ${String(e)}`,
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{ display: "grid", placeItems: "center", minHeight: "100vh" }}>
+      <form
+        onSubmit={submit}
+        style={{
+          background: "var(--panel)",
+          border: "1px solid var(--line)",
+          borderRadius: 16,
+          padding: "30px 32px",
+          width: 380,
+          boxShadow: "var(--shadow)",
+        }}
+      >
+        <div style={{ fontWeight: 800, fontSize: 18, letterSpacing: "-0.3px" }}>
+          elfagent
+        </div>
+        <p style={{ fontSize: 13, color: "var(--muted)", margin: "8px 0 18px", lineHeight: 1.6 }}>
+          Launch Readiness Council. Each run invokes several models and costs
+          real credit, so access is keyed.
+        </p>
+        <input
+          type="password"
+          value={key}
+          onChange={(e) => setKey(e.target.value)}
+          placeholder="Access key"
+          autoFocus
+          style={{
+            width: "100%",
+            fontFamily: "inherit",
+            fontSize: 14,
+            padding: "10px 12px",
+            borderRadius: 10,
+            border: "1.5px solid var(--line2)",
+          }}
+        />
+        {error && (
+          <div className="err" style={{ marginTop: 12, marginBottom: 0 }}>
+            {error}
+          </div>
+        )}
+        <button
+          className="btn primary"
+          type="submit"
+          disabled={busy || !key}
+          style={{ width: "100%", marginTop: 14 }}
+        >
+          {busy ? "Checking…" : "Enter"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
 export default function App() {
+  const [locked, setLocked] = useState(false);
   const [launches, setLaunches] = useState<Launch[]>([]);
   const [anatomy, setAnatomy] = useState<AnatomyData | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -34,15 +120,20 @@ export default function App() {
 
   const { run, start, reset, setRun } = useRun();
 
-  useEffect(() => {
+  const load = useCallback(() => {
     getLaunches()
       .then((data) => {
+        setLocked(false);
         setLaunches(data);
         setSelected((current) => current ?? data[0]?.launch_id ?? null);
       })
-      .catch((e) => setError(String(e)));
-    getAnatomy().then(setAnatomy).catch(() => undefined);
+      .catch((e) => (e instanceof Unauthorised ? setLocked(true) : setError(String(e))));
+    getAnatomy()
+      .then(setAnatomy)
+      .catch(() => undefined);
   }, []);
+
+  useEffect(load, [load]);
 
   const launch = launches.find((l) => l.launch_id === selected) ?? null;
 
@@ -58,11 +149,11 @@ export default function App() {
 
   const decide = useCallback(
     async (action: Lean, note: string) => {
-      if (!launch) return;
+      if (!launch || !run.thread) return;
       setDeciding(true);
       setError(undefined);
       try {
-        const result = await submitDecision(launch.launch_id, {
+        const result = await submitDecision(run.thread, {
           decided_action: action,
           note,
           per_market: run.recommendation?.per_market_action ?? [],
@@ -76,8 +167,10 @@ export default function App() {
         setDeciding(false);
       }
     },
-    [launch, run.recommendation, setRun],
+    [launch, run.recommendation, run.thread, setRun],
   );
+
+  if (locked) return <Gate onUnlock={load} />;
 
   return (
     <div className="app">

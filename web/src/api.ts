@@ -137,16 +137,31 @@ export const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "")
 
 const url = (path: string) => `${API_BASE}${path}`;
 
+/** Raised when the API wants the shared access key. */
+export class Unauthorised extends Error {}
+
 async function get<T>(path: string): Promise<T> {
-  const response = await fetch(url(path));
+  const response = await fetch(url(path), { credentials: "include" });
+  if (response.status === 401) throw new Unauthorised();
   if (!response.ok) throw new Error(`${path} -> ${response.status}`);
   return response.json();
 }
 
+export async function authenticate(key: string): Promise<void> {
+  const response = await fetch(url("/api/auth"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ key }),
+  });
+  if (response.status === 401) throw new Unauthorised();
+  if (!response.ok) throw new Error(await response.text());
+}
+
 export const getLaunches = () => get<Launch[]>("/api/launches");
 export const getAnatomy = () => get<Anatomy>("/api/usecase");
-export const getTrace = (id: string) =>
-  get<OrchestrationEvent[]>(`/api/runs/${id}/trace`);
+export const getTrace = (thread: string) =>
+  get<OrchestrationEvent[]>(`/api/runs/thread/${thread}/trace`);
 
 export interface RunState {
   values: Record<string, any>;
@@ -154,20 +169,24 @@ export interface RunState {
   awaiting_human: boolean;
 }
 
-export async function getRunState(id: string): Promise<RunState | null> {
-  const response = await fetch(url(`/api/runs/${id}`));
+export async function getRunState(thread: string): Promise<RunState | null> {
+  const response = await fetch(url(`/api/runs/thread/${thread}`), {
+    credentials: "include",
+  });
   if (response.status === 404) return null;
+  if (response.status === 401) throw new Unauthorised();
   if (!response.ok) throw new Error(`state -> ${response.status}`);
   return response.json();
 }
 
 export async function submitDecision(
-  id: string,
+  thread: string,
   body: { decided_action: Lean; note?: string; per_market?: MarketReadiness[] },
 ) {
-  const response = await fetch(url(`/api/runs/${id}/decision`), {
+  const response = await fetch(url(`/api/runs/thread/${thread}/decision`), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify(body),
   });
   if (!response.ok) throw new Error(await response.text());
@@ -185,7 +204,12 @@ export function streamRun(
   onEvent: (event: OrchestrationEvent) => void,
   onError?: (error: Event) => void,
 ): () => void {
-  const source = new EventSource(url(`/api/runs/${launchId}/stream`));
+  // withCredentials so the access cookie rides along — EventSource cannot set
+  // headers, which is why the key is exchanged for a cookie rather than sent
+  // on each request.
+  const source = new EventSource(url(`/api/runs/${launchId}/stream`), {
+    withCredentials: true,
+  });
 
   const handle = (raw: MessageEvent) => {
     try {

@@ -3,6 +3,7 @@ import {
   type Anatomy as AnatomyData,
   type Launch,
   type Lean,
+  ApiUnreachable,
   Unauthorised,
   authenticate,
   getAnatomy,
@@ -127,7 +128,11 @@ export default function App() {
         setLaunches(data);
         setSelected((current) => current ?? data[0]?.launch_id ?? null);
       })
-      .catch((e) => (e instanceof Unauthorised ? setLocked(true) : setError(String(e))));
+      .catch((e) =>
+        e instanceof Unauthorised
+          ? setLocked(true)
+          : setError(e instanceof ApiUnreachable ? e.message : String(e)),
+      );
     getAnatomy()
       .then(setAnatomy)
       .catch(() => undefined);

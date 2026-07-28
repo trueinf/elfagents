@@ -140,11 +140,45 @@ const url = (path: string) => `${API_BASE}${path}`;
 /** Raised when the API wants the shared access key. */
 export class Unauthorised extends Error {}
 
+/** Raised when there is no API to talk to — a setup problem, not a bug. */
+export class ApiUnreachable extends Error {}
+
+const NO_API =
+  "This build has no API configured. Set VITE_API_BASE to the API's origin " +
+  "and redeploy — Vite bakes the value in at build time, so adding the " +
+  "variable without rebuilding changes nothing.";
+
+async function parse<T>(response: Response, path: string): Promise<T> {
+  // A deployed front end with no VITE_API_BASE calls its own origin, the SPA
+  // redirect serves index.html, and JSON.parse fails on "<!doctype" — an
+  // error that says nothing about the actual problem. Catch it here and say
+  // what is really wrong.
+  const kind = response.headers.get("content-type") ?? "";
+  if (!kind.includes("application/json")) {
+    throw new ApiUnreachable(
+      API_BASE
+        ? `${API_BASE}${path} did not return JSON (got ${kind || "no content-type"}). ` +
+          "Check the API is running and that this origin is in its CORS allow-list."
+        : NO_API,
+    );
+  }
+  return response.json();
+}
+
 async function get<T>(path: string): Promise<T> {
-  const response = await fetch(url(path), { credentials: "include" });
+  let response: Response;
+  try {
+    response = await fetch(url(path), { credentials: "include" });
+  } catch (cause) {
+    throw new ApiUnreachable(
+      API_BASE
+        ? `Could not reach ${API_BASE}. It may be asleep, down, or blocking this origin.`
+        : NO_API,
+    );
+  }
   if (response.status === 401) throw new Unauthorised();
   if (!response.ok) throw new Error(`${path} -> ${response.status}`);
-  return response.json();
+  return parse<T>(response, path);
 }
 
 export async function authenticate(key: string): Promise<void> {
